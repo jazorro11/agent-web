@@ -2,13 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createBrowserClient } from "@supabase/ssr";
-
-interface PendingConfirmation {
-  tool_call_id: string;
-  tool_name: string;
-  message: string;
-  args: Record<string, unknown>;
-}
+import type { PendingConfirmation } from "@agents/types";
 
 interface Message {
   role: string;
@@ -50,10 +44,11 @@ function buildInitialMessages(
         content: m.content,
         created_at: m.created_at,
         confirmation: {
+          kind: "human_approval",
           tool_call_id: sp.tool_call_id as string,
           tool_name: sp.tool_name as string,
           message: sp.message as string,
-          args: sp.args as Record<string, unknown>,
+          args: (sp.args as Record<string, unknown>) ?? {},
         },
         // Will be set to "pending" below if it matches the still-unresolved call
         confirmationStatus: "approved",
@@ -74,7 +69,7 @@ function buildInitialMessages(
       msgs.push({
         role: "assistant",
         content: pending.message,
-        confirmation: pending,
+        confirmation: { ...pending, kind: "human_approval" },
         confirmationStatus: "pending",
       });
     }
@@ -132,10 +127,11 @@ export function ChatInterface({
     const pending: PendingConfirmation | null =
       pendingCalls && pendingCalls.length > 0
         ? {
+            kind: "human_approval",
             tool_call_id: pendingCalls[0].id,
             tool_name: pendingCalls[0].tool_name,
             message: `Se requiere confirmación para "${pendingCalls[0].tool_name}".`,
-            args: pendingCalls[0].arguments_json ?? {},
+            args: (pendingCalls[0].arguments_json as Record<string, unknown>) ?? {},
           }
         : null;
 
@@ -191,7 +187,7 @@ export function ChatInterface({
       }
 
       // Another tool in the resumed graph may require confirmation too
-      if (data.pendingConfirmation) {
+      if (data.responseType === "pending_confirmation" && data.pendingConfirmation) {
         setMessages((prev) => [
           ...prev,
           {
@@ -238,7 +234,7 @@ export function ChatInterface({
         ]);
       }
 
-      if (data.pendingConfirmation) {
+      if (data.responseType === "pending_confirmation" && data.pendingConfirmation) {
         setMessages((prev) => [
           ...prev,
           {

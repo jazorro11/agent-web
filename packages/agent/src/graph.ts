@@ -49,7 +49,11 @@ export interface AgentInput {
   bypassConfirmation?: boolean;
 }
 
+export type AgentResponseType = "message" | "pending_confirmation";
+
 export interface AgentOutput {
+  /** Explicit outcome for clients — do not infer from free-text `response`. */
+  responseType: AgentResponseType;
   response: string;
   toolCalls: string[];
   pendingConfirmation?: PendingConfirmation;
@@ -341,6 +345,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     };
 
     const pendingConfirmation: PendingConfirmation = {
+      kind: "human_approval",
       tool_call_id: interruptValue.tool_call_id,
       tool_name: interruptValue.tool_name,
       message: interruptValue.message,
@@ -351,11 +356,16 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     await addMessage(db, sessionId, "assistant", interruptValue.message, {
       structured_payload: {
         type: "pending_confirmation",
-        ...pendingConfirmation,
+        kind: "human_approval",
+        tool_call_id: pendingConfirmation.tool_call_id,
+        tool_name: pendingConfirmation.tool_name,
+        message: pendingConfirmation.message,
+        args: pendingConfirmation.args,
       },
     });
 
     return {
+      responseType: "pending_confirmation",
       response: interruptValue.message,
       toolCalls: toolCallNames,
       pendingConfirmation,
@@ -372,6 +382,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   await addMessage(db, sessionId, "assistant", responseText);
 
   return {
+    responseType: "message",
     response: responseText,
     toolCalls: toolCallNames,
   };

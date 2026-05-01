@@ -77,6 +77,7 @@ export default async function ChatPage() {
   const initialPendingConfirmation =
     initialPendingToolCallId
       ? {
+          kind: "human_approval" as const,
           tool_call_id: initialPendingToolCallId,
           tool_name: initialPendingToolName!,
           message: initialPendingMessage!,

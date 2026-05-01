@@ -55,6 +55,19 @@ async function ghFetch(token: string, path: string, init?: RequestInit) {
   return res.json();
 }
 
+function requireGithubToken(ctx: ToolContext): string | null {
+  if (!ctx.githubToken?.trim()) return null;
+  return ctx.githubToken;
+}
+
+function githubNotConnectedPayload(): Record<string, unknown> {
+  return {
+    error:
+      "GitHub no está conectado o el token no está disponible. Conecta tu cuenta en Ajustes.",
+    code: "github_not_connected",
+  };
+}
+
 export async function executeGitHubTool(
   toolName: string,
   args: Record<string, unknown>,
@@ -62,7 +75,8 @@ export async function executeGitHubTool(
 ): Promise<Record<string, unknown>> {
   switch (toolName) {
     case "github_list_repos": {
-      const perPage = (args.per_page as number) || 10;
+      const raw = (args.per_page as number) || 10;
+      const perPage = Math.min(100, Math.max(1, Math.floor(raw) || 10));
       const repos = await ghFetch(token, `/user/repos?per_page=${perPage}&sort=updated`);
       return {
         repos: (repos as Array<Record<string, unknown>>).map((r) => ({
@@ -77,12 +91,14 @@ export async function executeGitHubTool(
     }
     case "github_list_issues": {
       const state = (args.state as string) || "open";
-      const issues = await ghFetch(
+      const raw = await ghFetch(
         token,
-        `/repos/${args.owner}/${args.repo}/issues?state=${state}`
+        `/repos/${encodeURIComponent(String(args.owner))}/${encodeURIComponent(String(args.repo))}/issues?state=${encodeURIComponent(state)}&per_page=50`
       );
+      const rows = raw as Array<Record<string, unknown>>;
+      const issuesOnly = rows.filter((i) => !("pull_request" in i));
       return {
-        issues: (issues as Array<Record<string, unknown>>).map((i) => ({
+        issues: issuesOnly.map((i) => ({
           number: i.number,
           title: i.title,
           state: i.state,
@@ -95,7 +111,7 @@ export async function executeGitHubTool(
     case "github_create_issue": {
       const issue = await ghFetch(
         token,
-        `/repos/${args.owner}/${args.repo}/issues`,
+        `/repos/${encodeURIComponent(String(args.owner))}/${encodeURIComponent(String(args.repo))}/issues`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -151,17 +167,29 @@ export const TOOL_HANDLERS: ToolHandlers = {
     return { enabled };
   },
 
-  github_list_repos: async (input, ctx) =>
-    executeGitHubTool("github_list_repos", input, ctx.githubToken!),
+  github_list_repos: async (input, ctx) => {
+    const t = requireGithubToken(ctx);
+    if (!t) return githubNotConnectedPayload();
+    return executeGitHubTool("github_list_repos", input, t);
+  },
 
-  github_list_issues: async (input, ctx) =>
-    executeGitHubTool("github_list_issues", input, ctx.githubToken!),
+  github_list_issues: async (input, ctx) => {
+    const t = requireGithubToken(ctx);
+    if (!t) return githubNotConnectedPayload();
+    return executeGitHubTool("github_list_issues", input, t);
+  },
 
-  github_create_issue: async (input, ctx) =>
-    executeGitHubTool("github_create_issue", input, ctx.githubToken!),
+  github_create_issue: async (input, ctx) => {
+    const t = requireGithubToken(ctx);
+    if (!t) return githubNotConnectedPayload();
+    return executeGitHubTool("github_create_issue", input, t);
+  },
 
-  github_create_repo: async (input, ctx) =>
-    executeGitHubTool("github_create_repo", input, ctx.githubToken!),
+  github_create_repo: async (input, ctx) => {
+    const t = requireGithubToken(ctx);
+    if (!t) return githubNotConnectedPayload();
+    return executeGitHubTool("github_create_repo", input, t);
+  },
 
   read_file: async (input: { path: string; offset?: number; limit?: number }) => {
     const result = await executeReadFile(input);

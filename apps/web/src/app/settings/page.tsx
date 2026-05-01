@@ -29,7 +29,7 @@ export default async function SettingsPage() {
     .select("*")
     .eq("user_id", user.id)
     .eq("provider", "github")
-    .single();
+    .maybeSingle();
 
   return (
     <div className="min-h-screen">

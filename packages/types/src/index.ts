@@ -89,6 +89,8 @@ export interface ToolDefinition {
 }
 
 export interface PendingConfirmation {
+  /** Stable discriminator for UI and APIs — never infer approval from `message` alone. */
+  kind: "human_approval";
   tool_call_id: string;
   tool_name: string;
   message: string;

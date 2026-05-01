@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import { TOOL_CATALOG } from "@agents/types";
@@ -31,6 +31,26 @@ export function SettingsForm({ userId, profile, toolSettings, telegramLinked, gi
     toolSettings.filter((t) => t.enabled).map((t) => t.tool_id)
   );
   const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [githubBanner, setGithubBanner] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get("github");
+    if (g === "connected") {
+      setGithubStatus("connected");
+      setGithubBanner({ tone: "ok", text: "GitHub conectado correctamente." });
+    } else if (g === "error") {
+      const reason = params.get("reason") ?? "unknown";
+      setGithubBanner({
+        tone: "err",
+        text: `No se pudo conectar GitHub (${reason}). Revisa la app OAuth y las variables de entorno.`,
+      });
+    }
+    if (g) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -160,6 +180,17 @@ export function SettingsForm({ userId, profile, toolSettings, telegramLinked, gi
       {/* GitHub */}
       <section className="space-y-4">
         <h2 className="text-base font-semibold">GitHub</h2>
+        {githubBanner && (
+          <p
+            className={`rounded-md px-3 py-2 text-sm ${
+              githubBanner.tone === "ok"
+                ? "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300"
+                : "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300"
+            }`}
+          >
+            {githubBanner.text}
+          </p>
+        )}
         {githubStatus === "connected" ? (
           <div className="flex items-center justify-between rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
             <div className="flex items-center gap-2">

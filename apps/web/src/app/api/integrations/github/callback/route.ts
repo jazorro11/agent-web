@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getGithubOAuthRedirectUri } from "@/lib/github-oauth";
 import { createServerClient, upsertIntegration } from "@agents/db";
 import { encrypt } from "@agents/db";
 
@@ -42,6 +43,8 @@ export async function GET(request: Request) {
     );
   }
 
+  const redirectUri = getGithubOAuthRedirectUri(request);
+
   const tokenRes = await fetch(
     "https://github.com/login/oauth/access_token",
     {
@@ -54,6 +57,7 @@ export async function GET(request: Request) {
         client_id: process.env.GITHUB_CLIENT_ID,
         client_secret: process.env.GITHUB_CLIENT_SECRET,
         code,
+        redirect_uri: redirectUri,
       }),
     }
   );

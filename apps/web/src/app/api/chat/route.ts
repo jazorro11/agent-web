@@ -127,6 +127,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
+      responseType: result.responseType,
       response: result.pendingConfirmation ? null : result.response,
       pendingConfirmation: result.pendingConfirmation ?? null,
       toolCalls: result.toolCalls,

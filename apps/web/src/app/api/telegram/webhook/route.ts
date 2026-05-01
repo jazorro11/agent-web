@@ -159,7 +159,7 @@ export async function POST(request: Request) {
           resumeDecision: action as "approve" | "reject",
         });
 
-        if (result.pendingConfirmation) {
+        if (result.responseType === "pending_confirmation" && result.pendingConfirmation) {
           await sendTelegramMessage(cb.message.chat.id, result.pendingConfirmation.message, {
             inline_keyboard: [
               [
@@ -411,7 +411,7 @@ export async function POST(request: Request) {
     const ctx = await buildAgentContext(db, userId, session.id);
     const result = await runAgent({ ...ctx, message: text });
 
-    if (result.pendingConfirmation) {
+    if (result.responseType === "pending_confirmation" && result.pendingConfirmation) {
       // Send the agent's conversational reply first if different from the confirmation prompt
       if (result.response && result.response !== result.pendingConfirmation.message) {
         await sendTelegramMessage(chatId, result.response);
