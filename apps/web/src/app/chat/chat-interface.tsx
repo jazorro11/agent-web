@@ -1,8 +1,77 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { PendingConfirmation } from "@agents/types";
+
+/* ─── Inline markdown renderer ─── */
+type MdSeg = { t: "h" | "li" | "link" | "bold" | "text" | "br"; c: string; href?: string };
+
+function parseMd(text: string): MdSeg[] {
+  const out: MdSeg[] = [];
+  for (const line of text.split("\n")) {
+    if (/^#{1,6}\s/.test(line)) {
+      out.push({ t: "h", c: line.replace(/^#{1,6}\s/, "") });
+    } else if (line.startsWith("- ") || /^\d+\.\s/.test(line)) {
+      out.push({ t: "li", c: line.replace(/^-\s|^\d+\.\s/, "") });
+    } else if (line.trim() === "") {
+      out.push({ t: "br", c: "" });
+    } else {
+      out.push(...parseInline(line));
+    }
+  }
+  return out;
+}
+
+function parseInline(text: string): MdSeg[] {
+  const segs: MdSeg[] = [];
+  const re = /\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) segs.push({ t: "text", c: text.slice(last, m.index) });
+    if (m[1]) segs.push({ t: "link", c: m[1], href: m[2] });
+    else if (m[3]) segs.push({ t: "bold", c: m[3] });
+    last = re.lastIndex;
+  }
+  if (last < text.length) segs.push({ t: "text", c: text.slice(last) });
+  return segs.length ? segs : [{ t: "text", c: text }];
+}
+
+function renderSeg(s: MdSeg, key: string) {
+  switch (s.t) {
+    case "link":
+      return <a key={key} href={s.href} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", textDecoration: "underline", wordBreak: "break-all" }}>{s.c}</a>;
+    case "bold":
+      return <strong key={key} style={{ fontWeight: "bold" }}>{s.c}</strong>;
+    case "br":
+      return <br key={key} />;
+    default:
+      return <span key={key}>{s.c}</span>;
+  }
+}
+
+function inlineContent(raw: string, prefix: string) {
+  return parseInline(raw).map((seg, j) => renderSeg(seg, `${prefix}-${j}`));
+}
+
+function RenderMd({ content }: { content: string }) {
+  const segs = useMemo(() => parseMd(content), [content]);
+  return (
+    <div style={{ wordBreak: "break-word", overflowWrap: "break-word" }}>
+      {segs.map((s, i) => {
+        switch (s.t) {
+          case "h":
+            return <h3 key={i} style={{ fontSize: "1rem", fontWeight: "bold", margin: "0.5rem 0" }}>{inlineContent(s.c, String(i))}</h3>;
+          case "li":
+            return <div key={i} style={{ marginLeft: "1rem", margin: "0.25rem 0" }}>• {inlineContent(s.c, String(i))}</div>;
+          default:
+            return renderSeg(s, String(i));
+        }
+      })}
+    </div>
+  );
+}
 
 interface Message {
   role: string;
@@ -345,13 +414,17 @@ export function ChatInterface({
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2.5 text-sm leading-relaxed ${
+                  className={`max-w-[80%] overflow-hidden break-words rounded-lg px-4 py-2.5 text-sm leading-relaxed ${
                     msg.role === "user"
                       ? "bg-blue-600 text-white"
                       : "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {msg.role === "assistant" ? (
+                    <RenderMd content={msg.content} />
+                  ) : (
+                    <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                  )}
                   {msg.confirmation && msg.confirmationStatus === "pending" && (
                     <div className="mt-3 flex gap-2">
                       <button
