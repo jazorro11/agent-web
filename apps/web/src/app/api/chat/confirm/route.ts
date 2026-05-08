@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServerClient, getPendingToolCall, decrypt } from "@agents/db";
-import { runAgent } from "@agents/agent";
+import { runAgent, resolveGoogleToken } from "@agents/agent";
 
 export async function POST(request: Request) {
   try {
@@ -69,6 +69,19 @@ export async function POST(request: Request) {
       }
     }
 
+    let googleToken: string | undefined;
+    const hasGoogle = (integrations ?? []).some(
+      (i: Record<string, unknown>) => i.provider === "google"
+    );
+    if (hasGoogle) {
+      try {
+        const t = await resolveGoogleToken(db, user.id);
+        if (t) googleToken = t;
+      } catch {
+        // ignore
+      }
+    }
+
     // Resume the interrupted LangGraph with the human decision
     const result = await runAgent({
       resumeDecision: action as "approve" | "reject",
@@ -92,6 +105,7 @@ export async function POST(request: Request) {
         created_at: i.created_at as string,
       })),
       githubToken,
+      googleToken,
     });
 
     return NextResponse.json({

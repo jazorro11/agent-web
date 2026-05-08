@@ -18,6 +18,16 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Google Calendar OAuth (optional)
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), enable **Google Calendar API** for your project.
+2. Configure the **OAuth consent screen** and add scopes `.../auth/calendar.events` and `.../auth/calendar.readonly`.
+3. Create an **OAuth 2.0 Client ID** (Web application). Add authorized redirect URI:
+   - `${NEXT_PUBLIC_SITE_URL}/api/integrations/google/callback` (e.g. `http://localhost:3000/api/integrations/google/callback` in dev).
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.local` (see `.env.example`).
+5. Run DB migration `00005_google_calendar.sql` (adds `user_integrations.expires_at` for token refresh).
+6. Users connect from **Ajustes** → **Conectar Google Calendar**.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

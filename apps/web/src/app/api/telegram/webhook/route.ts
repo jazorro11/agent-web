@@ -4,7 +4,7 @@ import {
   decrypt,
   getPendingToolCall,
 } from "@agents/db";
-import { runAgent } from "@agents/agent";
+import { runAgent, resolveGoogleToken } from "@agents/agent";
 import { sendTelegramMessage } from "@/lib/telegram/send";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
@@ -89,6 +89,19 @@ async function buildAgentContext(
 
   const githubToken = await resolveGitHubToken(db, userId);
 
+  let googleToken: string | undefined;
+  const hasGoogle = (integrations ?? []).some(
+    (i: Record<string, unknown>) => i.provider === "google"
+  );
+  if (hasGoogle) {
+    try {
+      const t = await resolveGoogleToken(db, userId);
+      if (t) googleToken = t;
+    } catch (err) {
+      console.error("Failed to resolve Google token:", err);
+    }
+  }
+
   return {
     userId,
     sessionId,
@@ -110,6 +123,7 @@ async function buildAgentContext(
       created_at: i.created_at as string,
     })),
     githubToken,
+    googleToken,
   };
 }
 

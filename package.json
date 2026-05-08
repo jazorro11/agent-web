@@ -16,6 +16,7 @@
     "turbo": "^2"
   },
   "overrides": {
+    "@langchain/core": "1.1.41",
     "langsmith": "^0.5.0"
   },
   "author": {
@@ -27,9 +28,5 @@
       "email": "oscar@gndx.dev",
       "url": "https://lab10.ai"
     }
-  ],
-  "dependencies": {
-    "@langfuse/core": "^5.2.0",
-    "@langfuse/langchain": "^5.2.0"
-  }
+  ]
 }

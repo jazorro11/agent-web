@@ -7,6 +7,7 @@ import { TOOL_SCHEMAS } from "./schemas";
 import { withTracking } from "./withTracking";
 import { executeBash } from "./bashExec";
 import { executeReadFile, executeWriteFile, executeEditFile } from "./fileTools";
+import { executeGoogleCalendarTool } from "./googleCalendar";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_UA = "10x-builders-agent/1.0";
@@ -18,6 +19,7 @@ export interface ToolContext {
   enabledTools: UserToolSetting[];
   integrations: UserIntegration[];
   githubToken?: string;
+  googleToken?: string;
 }
 
 function isToolAvailable(toolId: string, ctx: ToolContext): boolean {
@@ -65,6 +67,19 @@ function githubNotConnectedPayload(): Record<string, unknown> {
     error:
       "GitHub no está conectado o el token no está disponible. Conecta tu cuenta en Ajustes.",
     code: "github_not_connected",
+  };
+}
+
+function requireGoogleToken(ctx: ToolContext): string | null {
+  if (!ctx.googleToken?.trim()) return null;
+  return ctx.googleToken;
+}
+
+function googleNotConnectedPayload(): Record<string, unknown> {
+  return {
+    error:
+      "Google Calendar no está conectado o la sesión expiró. Conecta tu cuenta en Ajustes.",
+    code: "google_not_connected",
   };
 }
 
@@ -189,6 +204,52 @@ export const TOOL_HANDLERS: ToolHandlers = {
     const t = requireGithubToken(ctx);
     if (!t) return githubNotConnectedPayload();
     return executeGitHubTool("github_create_repo", input, t);
+  },
+
+  google_calendar_list_calendars: async (_input, ctx) => {
+    const t = requireGoogleToken(ctx);
+    if (!t) return googleNotConnectedPayload();
+    return executeGoogleCalendarTool("google_calendar_list_calendars", {}, t);
+  },
+
+  google_calendar_list_events: async (input, ctx) => {
+    const t = requireGoogleToken(ctx);
+    if (!t) return googleNotConnectedPayload();
+    return executeGoogleCalendarTool(
+      "google_calendar_list_events",
+      input as Record<string, unknown>,
+      t
+    );
+  },
+
+  google_calendar_create_event: async (input, ctx) => {
+    const t = requireGoogleToken(ctx);
+    if (!t) return googleNotConnectedPayload();
+    return executeGoogleCalendarTool(
+      "google_calendar_create_event",
+      input as Record<string, unknown>,
+      t
+    );
+  },
+
+  google_calendar_update_event: async (input, ctx) => {
+    const t = requireGoogleToken(ctx);
+    if (!t) return googleNotConnectedPayload();
+    return executeGoogleCalendarTool(
+      "google_calendar_update_event",
+      input as Record<string, unknown>,
+      t
+    );
+  },
+
+  google_calendar_delete_event: async (input, ctx) => {
+    const t = requireGoogleToken(ctx);
+    if (!t) return googleNotConnectedPayload();
+    return executeGoogleCalendarTool(
+      "google_calendar_delete_event",
+      input as Record<string, unknown>,
+      t
+    );
   },
 
   read_file: async (input: { path: string; offset?: number; limit?: number }) => {

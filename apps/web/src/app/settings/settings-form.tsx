@@ -11,16 +11,28 @@ interface Props {
   toolSettings: Array<{ tool_id: string; enabled: boolean }>;
   telegramLinked: boolean;
   githubConnected: boolean;
+  googleConnected: boolean;
 }
 
-export function SettingsForm({ userId, profile, toolSettings, telegramLinked, githubConnected }: Props) {
+export function SettingsForm({
+  userId,
+  profile,
+  toolSettings,
+  telegramLinked,
+  githubConnected,
+  googleConnected,
+}: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [githubStatus, setGithubStatus] = useState<"connected" | "disconnected">(
     githubConnected ? "connected" : "disconnected"
   );
+  const [googleStatus, setGoogleStatus] = useState<"connected" | "disconnected">(
+    googleConnected ? "connected" : "disconnected"
+  );
   const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
 
   const [name, setName] = useState((profile?.name as string) ?? "");
   const [agentName, setAgentName] = useState((profile?.agent_name as string) ?? "Agente");
@@ -32,6 +44,7 @@ export function SettingsForm({ userId, profile, toolSettings, telegramLinked, gi
   );
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [githubBanner, setGithubBanner] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [googleBanner, setGoogleBanner] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -45,6 +58,25 @@ export function SettingsForm({ userId, profile, toolSettings, telegramLinked, gi
       setGithubBanner({
         tone: "err",
         text: `No se pudo conectar GitHub (${reason}). Revisa la app OAuth y las variables de entorno.`,
+      });
+    }
+    if (g) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get("google");
+    if (g === "connected") {
+      setGoogleStatus("connected");
+      setGoogleBanner({ tone: "ok", text: "Google Calendar conectado correctamente." });
+    } else if (g === "error") {
+      const reason = params.get("reason") ?? "unknown";
+      setGoogleBanner({
+        tone: "err",
+        text: `No se pudo conectar Google Calendar (${reason}). Revisa la consola de Google Cloud y las variables de entorno.`,
       });
     }
     if (g) {
@@ -101,6 +133,19 @@ export function SettingsForm({ userId, profile, toolSettings, telegramLinked, gi
       }
     } finally {
       setDisconnecting(false);
+    }
+  }
+
+  async function handleDisconnectGoogle() {
+    setDisconnectingGoogle(true);
+    try {
+      const res = await fetch("/api/integrations/google/disconnect", { method: "POST" });
+      if (res.ok) {
+        setGoogleStatus("disconnected");
+        router.refresh();
+      }
+    } finally {
+      setDisconnectingGoogle(false);
     }
   }
 
@@ -215,6 +260,50 @@ export function SettingsForm({ userId, profile, toolSettings, telegramLinked, gi
               className="inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               Conectar GitHub
+            </a>
+          </div>
+        )}
+      </section>
+
+      {/* Google Calendar */}
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold">Google Calendar</h2>
+        {googleBanner && (
+          <p
+            className={`rounded-md px-3 py-2 text-sm ${
+              googleBanner.tone === "ok"
+                ? "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300"
+                : "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300"
+            }`}
+          >
+            {googleBanner.text}
+          </p>
+        )}
+        {googleStatus === "connected" ? (
+          <div className="flex items-center justify-between rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-400">Conectado</span>
+            </div>
+            <button
+              onClick={handleDisconnectGoogle}
+              disabled={disconnectingGoogle}
+              className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+            >
+              {disconnectingGoogle ? "Desconectando..." : "Desconectar"}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-neutral-500">
+              Conecta tu cuenta de Google para que el agente pueda leer y gestionar eventos en tu
+              calendario (las acciones de escritura requieren tu confirmación en el chat).
+            </p>
+            <a
+              href="/api/integrations/google"
+              className="inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              Conectar Google Calendar
             </a>
           </div>
         )}

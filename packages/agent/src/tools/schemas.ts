@@ -22,6 +22,64 @@ export const TOOL_SCHEMAS = {
     description: z.string().optional().default(""),
     isPrivate: z.boolean().optional().default(false),
   }),
+  google_calendar_list_calendars: z.object({}),
+  google_calendar_list_events: z.object({
+    calendarId: z.string().optional(),
+    timeMin: z.string().optional(),
+    timeMax: z.string().optional(),
+    q: z.string().optional(),
+    maxResults: z.number().int().min(1).max(2500).optional(),
+  }),
+  google_calendar_create_event: z.object({
+    calendarId: z.string().optional(),
+    summary: z.string().min(1),
+    description: z.string().optional(),
+    location: z.string().optional(),
+    start: z.object({
+      dateTime: z.string(),
+      timeZone: z.string().optional(),
+    }),
+    end: z.object({
+      dateTime: z.string(),
+      timeZone: z.string().optional(),
+    }),
+    attendees: z.array(z.string().email()).optional(),
+  }),
+  google_calendar_update_event: z
+    .object({
+      calendarId: z.string().optional(),
+      eventId: z.string().min(1),
+      summary: z.string().optional(),
+      description: z.string().optional(),
+      location: z.string().optional(),
+      start: z
+        .object({
+          dateTime: z.string(),
+          timeZone: z.string().optional(),
+        })
+        .optional(),
+      end: z
+        .object({
+          dateTime: z.string(),
+          timeZone: z.string().optional(),
+        })
+        .optional(),
+      attendees: z.array(z.string().email()).optional(),
+    })
+    .refine(
+      (d) =>
+        d.summary !== undefined ||
+        d.description !== undefined ||
+        d.location !== undefined ||
+        d.start !== undefined ||
+        d.end !== undefined ||
+        d.attendees !== undefined,
+      { message: "Provide at least one field to update besides eventId." }
+    ),
+  google_calendar_delete_event: z.object({
+    calendarId: z.string().optional(),
+    eventId: z.string().min(1),
+  }),
   read_file: z.object({
     path: z.string().describe("Absolute path or path relative to the server process working directory."),
     offset: z.number().int().min(1).optional().describe("1-based line number to start reading from. Defaults to 1."),

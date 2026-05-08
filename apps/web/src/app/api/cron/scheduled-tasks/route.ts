@@ -8,7 +8,7 @@ import {
   completeTaskRun,
   failTaskRun,
 } from "@agents/db";
-import { runAgent } from "@agents/agent";
+import { runAgent, resolveGoogleToken } from "@agents/agent";
 import { notifyUserViaTelegram } from "@/lib/telegram/send";
 import type { ScheduledTask, UserToolSetting, UserIntegration } from "@agents/types";
 
@@ -60,6 +60,19 @@ async function buildAgentContextForTask(
     }
   }
 
+  let googleToken: string | undefined;
+  const hasGoogle = (integrations ?? []).some(
+    (i: Record<string, unknown>) => i.provider === "google"
+  );
+  if (hasGoogle) {
+    try {
+      const t = await resolveGoogleToken(db, userId);
+      if (t) googleToken = t;
+    } catch {
+      googleToken = undefined;
+    }
+  }
+
   return {
     userId,
     sessionId,
@@ -83,6 +96,7 @@ async function buildAgentContextForTask(
       created_at: i.created_at as string,
     })) as UserIntegration[],
     githubToken,
+    googleToken,
   };
 }
 

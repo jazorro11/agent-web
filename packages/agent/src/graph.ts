@@ -9,6 +9,7 @@ import {
   AIMessage,
   SystemMessage,
   ToolMessage,
+  defaultToolCallParser,
   type BaseMessage,
 } from "@langchain/core/messages";
 import type { RunnableConfig } from "@langchain/core/runnables";
@@ -45,6 +46,7 @@ export interface AgentInput {
   enabledTools: UserToolSetting[];
   integrations: UserIntegration[];
   githubToken?: string;
+  googleToken?: string;
   /** Skip HITL interrupts and auto-approve all tool calls. Use only for unattended runs (e.g. cron). */
   bypassConfirmation?: boolean;
 }
@@ -97,12 +99,185 @@ function buildConfirmationMessage(
           : `con expresión cron "${args.cron_expr}"`;
       return `Se requiere confirmación para programar una tarea (${schedType}) ${when}.\n\nPrompt: "${args.prompt}"`;
     }
+    case "google_calendar_create_event": {
+      const cal = args.calendarId ? String(args.calendarId) : "primary";
+      const attendees = Array.isArray(args.attendees)
+        ? (args.attendees as string[]).join(", ")
+        : "";
+      return `Se requiere confirmación para crear el evento **"${args.summary}"** en el calendario \`${cal}\`.\n\n**Inicio:** \`${JSON.stringify(args.start)}\`\n**Fin:** \`${JSON.stringify(args.end)}\`${attendees ? `\n**Asistentes:** ${attendees}` : ""}`;
+    }
+    case "google_calendar_update_event": {
+      const cal = args.calendarId ? String(args.calendarId) : "primary";
+      const keys = ["summary", "description", "location", "start", "end", "attendees"].filter(
+        (k) => args[k] !== undefined
+      );
+      return `Se requiere confirmación para actualizar el evento \`${args.eventId}\` (calendario \`${cal}\`).\n\n**Campos a cambiar:** ${keys.length ? keys.join(", ") : "(ninguno)"}`;
+    }
+    case "google_calendar_delete_event": {
+      const cal = args.calendarId ? String(args.calendarId) : "primary";
+      return `Se requiere confirmación para **eliminar de forma irreversible** el evento \`${args.eventId}\` del calendario \`${cal}\`.`;
+    }
     default:
       return `Se requiere confirmación para ejecutar "${toolId}" (riesgo: ${getToolRisk(toolId)}).`;
   }
 }
 
 const MAX_TOOL_ITERATIONS = 6;
+
+/**
+ * Checkpoint serde (and historically duplicate `@langchain/core` installs in
+ * monorepos) can yield objects where `instanceof AIMessage` is false while the
+ * role is still `"ai"`. Rebuild with *this* module's `AIMessage` so tool_calls
+ * parsers run consistently.
+ */
+function toLocalAIMessage(m: BaseMessage): AIMessage | null {
+  if (m instanceof AIMessage) return m;
+  if (typeof m !== "object" || m === null) return null;
+  const anyM = m as { type?: string; _getType?: () => string };
+  const role = anyM.type ?? (typeof anyM._getType === "function" ? anyM._getType() : undefined);
+  if (role !== "ai") return null;
+  const src = m as AIMessage;
+  return new AIMessage({
+    content: src.content,
+    tool_calls: src.tool_calls ?? [],
+    invalid_tool_calls: src.invalid_tool_calls ?? [],
+    additional_kwargs: { ...(src.additional_kwargs ?? {}) },
+    response_metadata: { ...(src.response_metadata ?? {}) },
+    id: src.id,
+    name: src.name,
+    usage_metadata: src.usage_metadata,
+  });
+}
+
+/**
+ * Checkpoint serde can hydrate an AIMessage where the provider still "sees"
+ * tool calls (e.g. in `additional_kwargs`, v1 `content` blocks) but `.tool_calls`
+ * stayed empty — so `toolExecutorNode` returned {} and the next `agent` invoke
+ * hit OpenAI's "tool_calls without tool messages" validation. Re-instantiating
+ * runs the AIMessage constructor parsers on all supported shapes.
+ */
+function coerceAiMessageToolCalls(m: BaseMessage): BaseMessage {
+  const ai = toLocalAIMessage(m);
+  if (!ai) return m;
+  if (ai.tool_calls?.length) return ai;
+  return new AIMessage({
+    content: ai.content,
+    tool_calls: ai.tool_calls,
+    invalid_tool_calls: ai.invalid_tool_calls,
+    additional_kwargs: { ...ai.additional_kwargs },
+    response_metadata: { ...ai.response_metadata },
+    id: ai.id,
+    name: ai.name,
+    usage_metadata: ai.usage_metadata,
+  });
+}
+
+/** Raw OpenAI-format tool_calls arrays can survive on `lc_kwargs` or serialized kwargs after checkpoint. */
+function gatherOpenAiRawToolCallsArray(ai: AIMessage): unknown[] {
+  const fromDirect = ai.additional_kwargs?.tool_calls;
+  if (Array.isArray(fromDirect) && fromDirect.length > 0) return fromDirect;
+  const lk = (
+    ai as unknown as {
+      lc_kwargs?: { additional_kwargs?: { tool_calls?: unknown[] }; tool_calls?: unknown[] };
+    }
+  ).lc_kwargs;
+  if (lk) {
+    if (Array.isArray(lk.tool_calls) && lk.tool_calls.length > 0) return lk.tool_calls;
+    const nested = lk.additional_kwargs?.tool_calls;
+    if (Array.isArray(nested) && nested.length > 0) return nested;
+  }
+  if (typeof ai.toJSON === "function") {
+    try {
+      const serialized = ai.toJSON() as {
+        kwargs?: { additional_kwargs?: { tool_calls?: unknown[] } };
+      };
+      const t = serialized?.kwargs?.additional_kwargs?.tool_calls;
+      if (Array.isArray(t) && t.length > 0) return t;
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
+}
+
+function parseOpenAiToolCallsArray(rawArr: unknown[]): Array<{
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}> {
+  if (!rawArr.length) return [];
+  try {
+    const [parsed] = defaultToolCallParser(rawArr as never);
+    if (parsed?.length) {
+      return parsed
+        .map((tc) => ({
+          id: String(tc.id ?? ""),
+          name: String(tc.name),
+          args: (tc.args as Record<string, unknown>) ?? {},
+        }))
+        .filter((tc) => tc.id && tc.name);
+    }
+  } catch {
+    /* fall through to manual parse */
+  }
+  const out: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+  for (const t of rawArr) {
+    if (typeof t !== "object" || t === null) continue;
+    const row = t as { id?: string; function?: { name?: string; arguments?: string } };
+    let args: Record<string, unknown> = {};
+    if (row.function?.arguments) {
+      try {
+        args = JSON.parse(row.function.arguments) as Record<string, unknown>;
+      } catch {
+        args = {};
+      }
+    }
+    const id = String(row.id ?? "");
+    const name = String(row.function?.name ?? "");
+    if (id && name) out.push({ id, name, args });
+  }
+  return out;
+}
+
+/** Parsed tool invocations for executor / routing (OpenAI `additional_kwargs` shape + v1 blocks). */
+function listPendingToolCallsFromMessage(lastRaw: BaseMessage): Array<{
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}> {
+  const ai0 = toLocalAIMessage(lastRaw);
+  if (!ai0) return [];
+  const coerced = coerceAiMessageToolCalls(ai0);
+  if (coerced instanceof AIMessage && coerced.tool_calls?.length) {
+    return coerced.tool_calls
+      .map((tc) => ({
+        id: String(tc.id ?? ""),
+        name: String(tc.name),
+        args: (tc.args as Record<string, unknown>) ?? {},
+      }))
+      .filter((tc) => tc.id && tc.name);
+  }
+  const ai = coerced instanceof AIMessage ? coerced : ai0;
+  const fromOpenAi = parseOpenAiToolCallsArray(gatherOpenAiRawToolCallsArray(ai));
+  if (fromOpenAi.length > 0) return fromOpenAi;
+  const c = ai.content;
+  if (Array.isArray(c) && c.length > 0) {
+    const out: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+    for (const b of c) {
+      if (typeof b !== "object" || b === null) continue;
+      const block = b as { type?: string; id?: string; name?: string; args?: Record<string, unknown> };
+      if (block.type === "tool_call" && block.id && block.name) {
+        out.push({
+          id: String(block.id),
+          name: String(block.name),
+          args: block.args ?? {},
+        });
+      }
+    }
+    return out;
+  }
+  return [];
+}
 
 export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const {
@@ -115,11 +290,20 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     enabledTools,
     integrations,
     githubToken,
+    googleToken,
     bypassConfirmation = false,
   } = input;
 
   const model = createChatModel();
-  const toolCtx: ToolContext = { db, userId, sessionId, enabledTools, integrations, githubToken };
+  const toolCtx: ToolContext = {
+    db,
+    userId,
+    sessionId,
+    enabledTools,
+    integrations,
+    githubToken,
+    googleToken,
+  };
   const lcTools = buildLangChainTools(toolCtx);
 
   const modelWithTools = lcTools.length > 0 ? model.bindTools(lcTools) : model;
@@ -130,6 +314,10 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     state: typeof GraphState.State,
     config?: RunnableConfig
   ): Promise<Partial<typeof GraphState.State>> {
+    const lastAwaitingTools = state.messages[state.messages.length - 1];
+    if (listPendingToolCallsFromMessage(lastAwaitingTools).length > 0) {
+      return new Command({ goto: "tools" }) as unknown as Partial<typeof GraphState.State>;
+    }
     const currentDate = new Date().toLocaleString("es", {
       timeZone: "America/Bogota",
       weekday: "long",
@@ -142,10 +330,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     const systemPromptWithDate = `${state.systemPrompt}\n\nFecha y hora actual: ${currentDate} (hora Colombia).`;
 
     // Inject SystemMessage fresh so it is never accumulated in state.messages.
+    const messagesForModel = state.messages.map((m) => coerceAiMessageToolCalls(m));
     const response = await modelWithTools.invoke(
       [
         new SystemMessage(systemPromptWithDate),
-        ...state.messages,
+        ...messagesForModel,
       ],
       config
     );
@@ -156,14 +345,15 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     state: typeof GraphState.State,
     config?: RunnableConfig
   ): Promise<Partial<typeof GraphState.State>> {
-    const lastMsg = state.messages[state.messages.length - 1];
-    if (!(lastMsg instanceof AIMessage) || !lastMsg.tool_calls?.length) {
+    const lastRaw = state.messages[state.messages.length - 1];
+    const pending = listPendingToolCallsFromMessage(lastRaw);
+    if (!pending.length) {
       return {};
     }
 
     const results: BaseMessage[] = [];
 
-    for (const tc of lastMsg.tool_calls) {
+    for (const tc of pending) {
       const def = TOOL_CATALOG.find((t) => t.name === tc.name);
       const toolId = def?.id ?? tc.name;
       toolCallNames.push(tc.name);
@@ -262,15 +452,23 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   }
 
   function shouldContinue(state: typeof GraphState.State): string {
-    const lastMsg = state.messages[state.messages.length - 1];
-    if (lastMsg instanceof AIMessage && lastMsg.tool_calls?.length) {
-      const iterations = state.messages.filter(
-        (m) => m instanceof AIMessage && (m as AIMessage).tool_calls?.length
-      ).length;
+    const lastRaw = state.messages[state.messages.length - 1];
+    if (listPendingToolCallsFromMessage(lastRaw).length > 0) {
+      const iterations = state.messages.filter((m) => {
+        const loc = toLocalAIMessage(m);
+        if (!loc) return false;
+        return Boolean(loc.tool_calls?.length) || listPendingToolCallsFromMessage(m).length > 0;
+      }).length;
       if (iterations >= MAX_TOOL_ITERATIONS) return "end";
       return "tools";
     }
     return "end";
+  }
+
+  /** After compaction, run tools before agent when the checkpoint tail is an assistant turn awaiting tool results. */
+  function routeCompactionNext(state: typeof GraphState.State): "agent" | "tools" {
+    const last = state.messages[state.messages.length - 1];
+    return listPendingToolCallsFromMessage(last).length > 0 ? "tools" : "agent";
   }
 
   const memoryInjectionNode = createMemoryInjectionNode({ db, userId });
@@ -282,7 +480,10 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     .addNode("tools", toolExecutorNode)
     .addEdge("__start__", "memory_injection")
     .addEdge("memory_injection", "compaction")
-    .addEdge("compaction", "agent")
+    .addConditionalEdges("compaction", routeCompactionNext, {
+      agent: "agent",
+      tools: "tools",
+    })
     .addConditionalEdges("agent", shouldContinue, {
       tools: "tools",
       end: "__end__",

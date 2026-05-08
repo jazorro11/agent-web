@@ -23,6 +23,8 @@ export interface UserIntegration {
   scopes: string[];
   status: "active" | "revoked" | "expired";
   created_at: string;
+  /** ISO timestamp when the OAuth access token expires (Google); null if N/A */
+  expires_at?: string | null;
 }
 
 export interface UserToolSetting {

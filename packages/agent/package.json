@@ -9,7 +9,7 @@
   "dependencies": {
     "@agents/db": "*",
     "@agents/types": "*",
-    "@langchain/core": "^1.0",
+    "@langchain/core": "1.1.41",
     "@langchain/langgraph": "^1.0",
     "@langchain/langgraph-checkpoint-postgres": "^1.0",
     "@langchain/openai": "^1.0",

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServerClient, decrypt, touchSession } from "@agents/db";
-import { runAgent, flushSessionMemory } from "@agents/agent";
+import { runAgent, flushSessionMemory, resolveGoogleToken } from "@agents/agent";
 
 export async function POST(request: Request) {
   try {
@@ -44,6 +44,19 @@ export async function POST(request: Request) {
         githubToken = decrypt(githubIntegration.encrypted_tokens as string);
       } catch (err) {
         console.error("Failed to decrypt GitHub token:", err);
+      }
+    }
+
+    let googleToken: string | undefined;
+    const hasGoogle = (integrations ?? []).some(
+      (i: Record<string, unknown>) => i.provider === "google"
+    );
+    if (hasGoogle) {
+      try {
+        const t = await resolveGoogleToken(db, user.id);
+        if (t) googleToken = t;
+      } catch (err) {
+        console.error("Failed to resolve Google token:", err);
       }
     }
 
@@ -116,6 +129,7 @@ export async function POST(request: Request) {
         created_at: i.created_at as string,
       })),
       githubToken,
+      googleToken,
     });
 
     // Fire-and-forget: extract long-term memories after a normal completion.
