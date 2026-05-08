@@ -7,3 +7,6 @@ dist/
 *.tsbuildinfo
 .temp/
 .branches/
+# IDE and tool configs
+.claude/
+.cursor/
