@@ -47,6 +47,7 @@ export interface AgentInput {
   integrations: UserIntegration[];
   githubToken?: string;
   googleToken?: string;
+  notionToken?: string;
   /** Skip HITL interrupts and auto-approve all tool calls. Use only for unattended runs (e.g. cron). */
   bypassConfirmation?: boolean;
 }
@@ -116,6 +117,11 @@ function buildConfirmationMessage(
     case "google_calendar_delete_event": {
       const cal = args.calendarId ? String(args.calendarId) : "primary";
       return `Se requiere confirmación para **eliminar de forma irreversible** el evento \`${args.eventId}\` del calendario \`${cal}\`.`;
+    }
+    case "notion_create_page": {
+      const parentLabel =
+        args.parent_type === "database" ? "base de datos" : "página";
+      return `Se requiere confirmación para crear la página **"${args.title}"** en la ${parentLabel} \`${args.parent_id}\` de Notion.`;
     }
     default:
       return `Se requiere confirmación para ejecutar "${toolId}" (riesgo: ${getToolRisk(toolId)}).`;
@@ -291,6 +297,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     integrations,
     githubToken,
     googleToken,
+    notionToken,
     bypassConfirmation = false,
   } = input;
 
@@ -303,6 +310,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     integrations,
     githubToken,
     googleToken,
+    notionToken,
   };
   const lcTools = buildLangChainTools(toolCtx);
 
@@ -526,8 +534,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     // reconstruct from DB to avoid duplicating messages across invocations.
     await addMessage(db, sessionId, "user", message!);
 
+    // Wrap the user-controlled system prompt in XML delimiters to prevent
+    // prompt injection from influencing the model's core instructions.
+    const wrappedSystemPrompt = `<user_persona>\n${systemPrompt}\n</user_persona>`;
     finalState = await app.invoke(
-      { messages: [new HumanMessage(message!)], sessionId, userId, systemPrompt },
+      { messages: [new HumanMessage(message!)], sessionId, userId, systemPrompt: wrappedSystemPrompt },
       config
     );
   }

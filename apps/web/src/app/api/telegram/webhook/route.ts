@@ -4,7 +4,7 @@ import {
   decrypt,
   getPendingToolCall,
 } from "@agents/db";
-import { runAgent, resolveGoogleToken } from "@agents/agent";
+import { runAgent, resolveGoogleToken, resolveNotionToken } from "@agents/agent";
 import { sendTelegramMessage } from "@/lib/telegram/send";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? "";
@@ -102,6 +102,19 @@ async function buildAgentContext(
     }
   }
 
+  let notionToken: string | undefined;
+  const hasNotion = (integrations ?? []).some(
+    (i: Record<string, unknown>) => i.provider === "notion"
+  );
+  if (hasNotion) {
+    try {
+      const t = await resolveNotionToken(db, userId);
+      if (t) notionToken = t;
+    } catch (err) {
+      console.error("Failed to resolve Notion token:", err);
+    }
+  }
+
   return {
     userId,
     sessionId,
@@ -124,12 +137,13 @@ async function buildAgentContext(
     })),
     githubToken,
     googleToken,
+    notionToken,
   };
 }
 
 export async function POST(request: Request) {
   const secret = request.headers.get("x-telegram-bot-api-secret-token");
-  if (WEBHOOK_SECRET && secret !== WEBHOOK_SECRET) {
+  if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

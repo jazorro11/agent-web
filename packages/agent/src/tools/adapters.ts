@@ -8,6 +8,11 @@ import { withTracking } from "./withTracking";
 import { executeBash } from "./bashExec";
 import { executeReadFile, executeWriteFile, executeEditFile } from "./fileTools";
 import { executeGoogleCalendarTool } from "./googleCalendar";
+import {
+  executeNotionSearch,
+  executeNotionGetPage,
+  executeNotionCreatePage,
+} from "./notionTools";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_UA = "10x-builders-agent/1.0";
@@ -20,6 +25,7 @@ export interface ToolContext {
   integrations: UserIntegration[];
   githubToken?: string;
   googleToken?: string;
+  notionToken?: string;
 }
 
 function isToolAvailable(toolId: string, ctx: ToolContext): boolean {
@@ -80,6 +86,19 @@ function googleNotConnectedPayload(): Record<string, unknown> {
     error:
       "Google Calendar no está conectado o la sesión expiró. Conecta tu cuenta en Ajustes.",
     code: "google_not_connected",
+  };
+}
+
+function requireNotionToken(ctx: ToolContext): string | null {
+  if (!ctx.notionToken?.trim()) return null;
+  return ctx.notionToken;
+}
+
+function notionNotConnectedPayload(): Record<string, unknown> {
+  return {
+    error:
+      "Notion no está conectado. Genera un token de integración en notion.so/my-integrations y conéctalo en Ajustes.",
+    code: "notion_not_connected",
   };
 }
 
@@ -270,6 +289,38 @@ export const TOOL_HANDLERS: ToolHandlers = {
   bash: async (input: { terminal: string; prompt: string }) => {
     const result = await executeBash(input.terminal, input.prompt);
     return result as unknown as Record<string, unknown>;
+  },
+
+  notion_search: async (input: { query: string; filter?: "page" | "database" }, ctx) => {
+    const t = requireNotionToken(ctx);
+    if (!t) return notionNotConnectedPayload();
+    return executeNotionSearch(input.query, input.filter, t);
+  },
+
+  notion_get_page: async (input: { page_id: string }, ctx) => {
+    const t = requireNotionToken(ctx);
+    if (!t) return notionNotConnectedPayload();
+    return executeNotionGetPage(input.page_id, t);
+  },
+
+  notion_create_page: async (
+    input: {
+      parent_id: string;
+      parent_type?: "page" | "database";
+      title: string;
+      content?: string;
+    },
+    ctx
+  ) => {
+    const t = requireNotionToken(ctx);
+    if (!t) return notionNotConnectedPayload();
+    return executeNotionCreatePage(
+      input.parent_id,
+      input.parent_type ?? "page",
+      input.title,
+      input.content,
+      t
+    );
   },
 
   schedule_task: async (

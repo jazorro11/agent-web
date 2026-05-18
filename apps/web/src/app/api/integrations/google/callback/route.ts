@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
   const tokenData = (await tokenRes.json()) as Record<string, unknown>;
 
   if (!tokenRes.ok || tokenData.error || !tokenData.access_token) {
-    console.error("Google token exchange failed:", tokenData);
+    console.error("Google token exchange failed:", tokenData?.error ?? "unknown error");
     return NextResponse.redirect(
       `${origin}/settings?google=error&reason=token_exchange`
     );

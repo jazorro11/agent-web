@@ -38,6 +38,13 @@ export default async function SettingsPage() {
     .eq("provider", "google")
     .maybeSingle();
 
+  const { data: notionIntegration } = await supabase
+    .from("user_integrations")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("provider", "notion")
+    .maybeSingle();
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
@@ -59,6 +66,7 @@ export default async function SettingsPage() {
           telegramLinked={!!telegramAccount}
           githubConnected={githubIntegration?.status === "active"}
           googleConnected={googleIntegration?.status === "active"}
+          notionConnected={notionIntegration?.status === "active"}
         />
       </main>
     </div>

@@ -318,6 +318,77 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     displayName: "Bash",
     displayDescription: "Ejecuta comandos bash en el servidor (riesgo alto, requiere confirmación).",
   },
+  {
+    id: "notion_search",
+    name: "notion_search",
+    description: "Search pages and databases in the user's Notion workspace by keyword.",
+    risk: "low",
+    requires_integration: "notion",
+    parameters_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query" },
+        filter: {
+          type: "string",
+          enum: ["page", "database"],
+          description: "Optionally restrict results to pages or databases only",
+        },
+      },
+      required: ["query"],
+    },
+    displayName: "Notion: buscar",
+    displayDescription: "Busca páginas y bases de datos en tu workspace de Notion.",
+  },
+  {
+    id: "notion_get_page",
+    name: "notion_get_page",
+    description: "Get the content and properties of a Notion page by its ID or URL.",
+    risk: "low",
+    requires_integration: "notion",
+    parameters_schema: {
+      type: "object",
+      properties: {
+        page_id: {
+          type: "string",
+          description: "Notion page ID (UUID) or full page URL",
+        },
+      },
+      required: ["page_id"],
+    },
+    displayName: "Notion: leer página",
+    displayDescription: "Lee el contenido y propiedades de una página de Notion.",
+  },
+  {
+    id: "notion_create_page",
+    name: "notion_create_page",
+    description:
+      "Create a new Notion page inside an existing page or database. Requires confirmation.",
+    risk: "medium",
+    requires_integration: "notion",
+    parameters_schema: {
+      type: "object",
+      properties: {
+        parent_id: {
+          type: "string",
+          description: "ID of the parent page or database where the new page will be created",
+        },
+        parent_type: {
+          type: "string",
+          enum: ["page", "database"],
+          description: "Whether the parent is a page or a database (default: page)",
+        },
+        title: { type: "string", description: "Title of the new page" },
+        content: {
+          type: "string",
+          description: "Optional body text for the first paragraph of the new page",
+        },
+      },
+      required: ["parent_id", "title"],
+    },
+    displayName: "Notion: crear página",
+    displayDescription:
+      "Crea una página nueva en Notion dentro de una página o base de datos (requiere confirmación).",
+  },
 ];
 
 export function getToolRisk(toolId: string): ToolRisk {

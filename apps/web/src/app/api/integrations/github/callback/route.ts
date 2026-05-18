@@ -65,7 +65,7 @@ export async function GET(request: Request) {
   const tokenData = await tokenRes.json();
 
   if (tokenData.error || !tokenData.access_token) {
-    console.error("GitHub token exchange failed:", tokenData);
+    console.error("GitHub token exchange failed:", tokenData?.error ?? "unknown error");
     return NextResponse.redirect(
       `${origin}/settings?github=error&reason=token_exchange`
     );

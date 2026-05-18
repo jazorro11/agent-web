@@ -148,7 +148,7 @@ export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
   const secret = authHeader?.replace("Bearer ", "") ?? "";
 
-  if (CRON_SECRET && secret !== CRON_SECRET) {
+  if (!CRON_SECRET || secret !== CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

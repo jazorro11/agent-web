@@ -130,6 +130,19 @@ export const TOOL_SCHEMAS = {
           "one_time tasks require run_at; recurring tasks require cron_expr.",
       }
     ),
+  notion_search: z.object({
+    query: z.string().min(1),
+    filter: z.enum(["page", "database"]).optional(),
+  }),
+  notion_get_page: z.object({
+    page_id: z.string().min(1).describe("Notion page ID (UUID) or full page URL"),
+  }),
+  notion_create_page: z.object({
+    parent_id: z.string().min(1),
+    parent_type: z.enum(["page", "database"]).optional().default("page"),
+    title: z.string().min(1),
+    content: z.string().optional(),
+  }),
 } as const;
 
 export type ToolSchemas = typeof TOOL_SCHEMAS;

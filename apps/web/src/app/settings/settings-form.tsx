@@ -12,6 +12,7 @@ interface Props {
   telegramLinked: boolean;
   githubConnected: boolean;
   googleConnected: boolean;
+  notionConnected: boolean;
 }
 
 export function SettingsForm({
@@ -21,6 +22,7 @@ export function SettingsForm({
   telegramLinked,
   githubConnected,
   googleConnected,
+  notionConnected,
 }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -33,6 +35,11 @@ export function SettingsForm({
   );
   const [disconnecting, setDisconnecting] = useState(false);
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
+  const [notionStatus, setNotionStatus] = useState<"connected" | "disconnected">(
+    notionConnected ? "connected" : "disconnected"
+  );
+  const [disconnectingNotion, setDisconnectingNotion] = useState(false);
+  const [notionBanner, setNotionBanner] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
 
   const [name, setName] = useState((profile?.name as string) ?? "");
   const [agentName, setAgentName] = useState((profile?.agent_name as string) ?? "Agente");
@@ -80,6 +87,25 @@ export function SettingsForm({
       });
     }
     if (g) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const n = params.get("notion");
+    if (n === "connected") {
+      setNotionStatus("connected");
+      setNotionBanner({ tone: "ok", text: "Notion conectado correctamente." });
+    } else if (n === "error") {
+      const reason = params.get("reason") ?? "unknown";
+      setNotionBanner({
+        tone: "err",
+        text: `No se pudo conectar Notion (${reason}). Revisa las variables de entorno y la configuración de la integración.`,
+      });
+    }
+    if (n) {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -146,6 +172,19 @@ export function SettingsForm({
       }
     } finally {
       setDisconnectingGoogle(false);
+    }
+  }
+
+  async function handleDisconnectNotion() {
+    setDisconnectingNotion(true);
+    try {
+      const res = await fetch("/api/integrations/notion/disconnect", { method: "POST" });
+      if (res.ok) {
+        setNotionStatus("disconnected");
+        router.refresh();
+      }
+    } finally {
+      setDisconnectingNotion(false);
     }
   }
 
@@ -304,6 +343,49 @@ export function SettingsForm({
               className="inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
             >
               Conectar Google Calendar
+            </a>
+          </div>
+        )}
+      </section>
+
+      {/* Notion */}
+      <section className="space-y-4">
+        <h2 className="text-base font-semibold">Notion</h2>
+        {notionBanner && (
+          <p
+            className={`rounded-md px-3 py-2 text-sm ${
+              notionBanner.tone === "ok"
+                ? "bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300"
+                : "bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300"
+            }`}
+          >
+            {notionBanner.text}
+          </p>
+        )}
+        {notionStatus === "connected" ? (
+          <div className="flex items-center justify-between rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-400">Conectado</span>
+            </div>
+            <button
+              onClick={handleDisconnectNotion}
+              disabled={disconnectingNotion}
+              className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+            >
+              {disconnectingNotion ? "Desconectando..." : "Desconectar"}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-neutral-500">
+              Conecta tu workspace de Notion para que el agente pueda buscar, leer y crear páginas.
+            </p>
+            <a
+              href="/api/integrations/notion"
+              className="inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            >
+              Conectar con Notion
             </a>
           </div>
         )}

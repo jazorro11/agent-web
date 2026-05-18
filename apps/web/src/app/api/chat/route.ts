@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServerClient, decrypt, touchSession } from "@agents/db";
-import { runAgent, flushSessionMemory, resolveGoogleToken } from "@agents/agent";
+import { runAgent, flushSessionMemory, resolveGoogleToken, resolveNotionToken } from "@agents/agent";
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +14,9 @@ export async function POST(request: Request) {
     const { message, sessionId: requestedSessionId } = await request.json();
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Message required" }, { status: 400 });
+    }
+    if (message.length > 10_000) {
+      return NextResponse.json({ error: "Message too long (max 10,000 characters)" }, { status: 400 });
     }
 
     const db = createServerClient();
@@ -57,6 +60,19 @@ export async function POST(request: Request) {
         if (t) googleToken = t;
       } catch (err) {
         console.error("Failed to resolve Google token:", err);
+      }
+    }
+
+    let notionToken: string | undefined;
+    const hasNotion = (integrations ?? []).some(
+      (i: Record<string, unknown>) => i.provider === "notion"
+    );
+    if (hasNotion) {
+      try {
+        const t = await resolveNotionToken(db, user.id);
+        if (t) notionToken = t;
+      } catch (err) {
+        console.error("Failed to resolve Notion token:", err);
       }
     }
 
@@ -130,6 +146,7 @@ export async function POST(request: Request) {
       })),
       githubToken,
       googleToken,
+      notionToken,
     });
 
     // Fire-and-forget: extract long-term memories after a normal completion.

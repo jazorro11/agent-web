@@ -1,19 +1,21 @@
 import { access, constants, mkdir, open, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, normalize, resolve } from "node:path";
+import { dirname, isAbsolute, normalize, resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
 
 const MAX_READ_LINES = 2_000;
 const MAX_CONTENT_BYTES = 2 * 1024 * 1024; // 2 MB
 
 // ---------------------------------------------------------------------------
-// Path resolution — no root confinement, mirrors bash tool behaviour
+// Path resolution — confined to FILE_TOOLS_ROOT (defaults to process.cwd())
 // ---------------------------------------------------------------------------
 
+const FILE_TOOLS_ROOT = normalize(
+  resolve(process.env.FILE_TOOLS_ROOT ?? process.cwd())
+);
+
 /**
- * Resolves `userPath` to an absolute path.
- * - Absolute paths are used as-is.
- * - Relative paths are resolved against `process.cwd()` (same as the bash tool).
- * Returns `{ ok: false }` only when the tool is disabled via env flag.
+ * Resolves `userPath` to an absolute path and ensures it stays within FILE_TOOLS_ROOT.
+ * Returns `{ ok: false }` when the tool is disabled or the path escapes the root.
  */
 function safePath(
   userPath: string
@@ -26,7 +28,17 @@ function safePath(
     };
   }
 
-  const resolved = normalize(isAbsolute(userPath) ? userPath : resolve(process.cwd(), userPath));
+  const resolved = normalize(isAbsolute(userPath) ? userPath : resolve(FILE_TOOLS_ROOT, userPath));
+
+  // Ensure path is inside FILE_TOOLS_ROOT (add sep to prevent prefix-only match)
+  if (resolved !== FILE_TOOLS_ROOT && !resolved.startsWith(FILE_TOOLS_ROOT + sep)) {
+    return {
+      ok: false,
+      code: "PATH_OUTSIDE_ROOT",
+      message: `Access denied: path is outside the allowed root (${FILE_TOOLS_ROOT}).`,
+    };
+  }
+
   return { ok: true, resolved };
 }
 

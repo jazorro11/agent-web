@@ -99,14 +99,15 @@ agents/
 
 - **StateGraph** con dos nodos: `agent` (invoca modelo con tools) y `tools` (ejecuta tool calls).
 - **Arista condicional** desde `agent`: si hay tool calls → `tools` → `agent`; si no → `__end__`.
-- **MemorySaver** como checkpointer (thread_id = session_id).
+- **PostgresSaver** como checkpointer persistente (thread_id = session_id), respaldado por `DATABASE_URL`.
 - Máximo 6 iteraciones de tool para evitar loops.
 
 ## LangChain: qué usamos
 
 - `@langchain/core`: `HumanMessage`, `AIMessage`, `SystemMessage`, `ToolMessage`, `tool()`.
 - `@langchain/openai`: `ChatOpenAI` con `baseURL` apuntando a OpenRouter.
-- `@langchain/langgraph`: `StateGraph`, `Annotation`, `MemorySaver`, `END`.
+- `@langchain/langgraph`: `StateGraph`, `Annotation`, `END`.
+- `@langchain/langgraph-checkpoint-postgres`: `PostgresSaver` para checkpointing persistente.
 
 ## Modelo de datos
 
