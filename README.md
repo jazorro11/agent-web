@@ -15,7 +15,6 @@ Monorepo con **Next.js**, **Supabase**, **LangGraph** y **OpenRouter**. Incluye 
 ## Paso 1 — Clonar e instalar dependencias
 
 ```bash
-cd agents
 npm install
 ```
 
