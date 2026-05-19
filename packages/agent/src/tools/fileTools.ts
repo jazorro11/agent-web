@@ -1,6 +1,7 @@
 import { access, constants, mkdir, open, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, normalize, resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
+import { agentDebug } from "../logger";
 
 const MAX_READ_LINES = 2_000;
 const MAX_CONTENT_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -25,8 +26,14 @@ function safePath(
   const fileToolsRoot = normalize(resolve(process.env.FILE_TOOLS_ROOT ?? process.cwd()));
   const resolved = normalize(isAbsolute(userPath) ? userPath : resolve(fileToolsRoot, userPath));
 
+  agentDebug(`[fileTools] FILE_TOOLS_ROOT env: ${process.env.FILE_TOOLS_ROOT ?? "(unset)"}`);
+  agentDebug(`[fileTools] fileToolsRoot resolved: ${fileToolsRoot}`);
+  agentDebug(`[fileTools] userPath received: ${userPath}`);
+  agentDebug(`[fileTools] resolved path: ${resolved}`);
+
   // Ensure path is inside fileToolsRoot (add sep to prevent prefix-only match)
   if (resolved !== fileToolsRoot && !resolved.startsWith(fileToolsRoot + sep)) {
+    agentDebug(`[fileTools] PATH_OUTSIDE_ROOT — rejecting`);
     return {
       ok: false,
       code: "PATH_OUTSIDE_ROOT",
@@ -34,6 +41,7 @@ function safePath(
     };
   }
 
+  agentDebug(`[fileTools] Path OK — proceeding`);
   return { ok: true, resolved };
 }
 

@@ -34,6 +34,7 @@ import { GraphState } from "./state";
 import { compactionNode } from "./nodes/compaction_node";
 import { createMemoryInjectionNode } from "./nodes/memory_injection_node";
 import { createLangfuseRunnableConfig } from "./langfuse";
+import { agentDebug } from "./logger";
 
 
 export interface AgentInput {
@@ -314,9 +315,45 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   };
   const lcTools = buildLangChainTools(toolCtx);
 
+  if (lcTools.length > 0) {
+    agentDebug(`[agent] Binding ${lcTools.length} tools to model:`, lcTools.map(t => t.name));
+  } else {
+    console.warn("[agent] WARNING: No tools available — model invoked without tools");
+  }
   const modelWithTools = lcTools.length > 0 ? model.bindTools(lcTools) : model;
 
   const toolCallNames: string[] = [];
+
+  /**
+   * If the checkpoint was left mid-interrupt (user sent a new message instead of
+   * confirming), the history may contain AIMessages with tool_calls that have no
+   * subsequent ToolMessage.  OpenAI rejects these with a 400.  Inject a cancellation
+   * ToolMessage for every unanswered tool_call_id so the history is always valid.
+   */
+  function injectMissingToolMessages(messages: BaseMessage[]): BaseMessage[] {
+    const answeredIds = new Set<string>();
+    for (const m of messages) {
+      if (m instanceof ToolMessage && m.tool_call_id) {
+        answeredIds.add(m.tool_call_id);
+      }
+    }
+    const result: BaseMessage[] = [];
+    for (const m of messages) {
+      result.push(m);
+      const pending = listPendingToolCallsFromMessage(m);
+      for (const tc of pending) {
+        if (tc.id && !answeredIds.has(tc.id)) {
+          agentDebug(`[agent] Injecting cancellation ToolMessage for orphaned tool_call_id: ${tc.id} (${tc.name})`);
+          result.push(new ToolMessage({
+            content: "Acción cancelada: el usuario envió un nuevo mensaje sin confirmar esta acción.",
+            tool_call_id: tc.id,
+          }));
+          answeredIds.add(tc.id);
+        }
+      }
+    }
+    return result;
+  }
 
   async function agentNode(
     state: typeof GraphState.State,
@@ -338,7 +375,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     const systemPromptWithDate = `${state.systemPrompt}\n\nFecha y hora actual: ${currentDate} (hora Colombia).`;
 
     // Inject SystemMessage fresh so it is never accumulated in state.messages.
-    const messagesForModel = state.messages.map((m) => coerceAiMessageToolCalls(m));
+    // Also sanitize orphaned tool_calls left by a prior interrupted (unconfirmed) turn.
+    const messagesForModel = injectMissingToolMessages(state.messages).map((m) => coerceAiMessageToolCalls(m));
     const response = await modelWithTools.invoke(
       [
         new SystemMessage(systemPromptWithDate),

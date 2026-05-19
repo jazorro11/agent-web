@@ -32,6 +32,15 @@ export async function POST(request: Request) {
       .select("*")
       .eq("user_id", user.id);
 
+    if (process.env.AGENT_DEBUG_LOGS === "true") {
+      console.log("[chat] enabledTools from DB:", JSON.stringify(
+        (toolSettings ?? []).map((t: Record<string, unknown>) => ({
+          tool_id: t.tool_id,
+          enabled: t.enabled,
+        }))
+      ));
+    }
+
     const { data: integrations } = await supabase
       .from("user_integrations")
       .select("*")
