@@ -305,7 +305,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "bash",
     name: "bash",
     description:
-      "Use this tool when you need to execute bash commands and interact with the operative system. This tool executes commands in a new or existing terminal and returns the commands text output. The system running is a unix-like O.S.",
+      "Use this tool when you need to execute shell commands and interact with the operating system. On Windows the shell is PowerShell (powershell.exe -NonInteractive); on Linux/macOS the shell is bash. Commands are executed non-interactively and their text output is returned. High-risk commands (disk formatting, recursive deletion of system paths, download-and-execute pipelines) are blocked.",
     risk: "high",
     parameters_schema: {
       type: "object",
