@@ -305,7 +305,7 @@ export const TOOL_CATALOG: ToolDefinition[] = [
     id: "bash",
     name: "bash",
     description:
-      "Use this tool when you need to execute shell commands and interact with the operating system. On Windows the shell is PowerShell (powershell.exe -NonInteractive); on Linux/macOS the shell is bash. Commands are executed non-interactively and their text output is returned. High-risk commands (disk formatting, recursive deletion of system paths, download-and-execute pipelines) are blocked.",
+      "Use this tool when you need to execute shell commands and interact with the operating system. On Windows the shell is PowerShell (powershell.exe -NonInteractive); on Linux/macOS the shell is bash. Commands are executed non-interactively and their text output is returned. High-risk commands (disk formatting, recursive deletion of system paths, download-and-execute pipelines) are blocked. IMPORTANT: Do NOT use this tool to read, create, or edit files — use read_file, write_file, and edit_file instead. Those tools handle encoding correctly, enforce path safety, and produce structured results. Only use bash for operations that cannot be done with the dedicated file tools (e.g. running scripts, installing packages, checking processes).",
     risk: "high",
     parameters_schema: {
       type: "object",
