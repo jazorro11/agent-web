@@ -5,16 +5,27 @@ const TIMEOUT_MS = 120_000;
 const MAX_BUFFER = 4 * 1024 * 1024; // 4 MB
 const MAX_COMMAND_LENGTH = 2_000;
 
-// Patterns that could cause irreversible damage or data exfiltration
-const BLOCKED_PATTERNS: RegExp[] = [
-  /rm\s+-rf?\s+[/~]/i,           // rm -rf /  or  rm -r ~/
-  /:\s*\(\s*\)\s*\{.*\|.*\&.*\}/,// fork bomb: :(){:|:&};:
-  /curl\s+.*\|\s*(ba)?sh/i,       // curl … | bash
-  /wget\s+.*\|\s*(ba)?sh/i,       // wget … | bash
-  /\bmkfs\b/i,                    // filesystem formatting
-  /\bdd\s+.*of=\/dev\//i,         // raw device write
-  />\s*\/dev\/sd[a-z]/i,          // redirect to block device
+// Patterns that could cause irreversible damage or data exfiltration — bash/sh
+const BLOCKED_PATTERNS_UNIX: RegExp[] = [
+  /rm\s+-rf?\s+[/~]/i,            // rm -rf /  or  rm -r ~/
+  /:\s*\(\s*\)\s*\{.*\|.*\&.*\}/, // fork bomb: :(){:|:&};:
+  /curl\s+.*\|\s*(ba)?sh/i,        // curl … | bash
+  /wget\s+.*\|\s*(ba)?sh/i,        // wget … | bash
+  /\bmkfs\b/i,                     // filesystem formatting
+  /\bdd\s+.*of=\/dev\//i,          // raw device write
+  />\s*\/dev\/sd[a-z]/i,           // redirect to block device
   /chmod\s+[0-7]*7[0-7]*\s+\/etc/i, // world-write /etc
+];
+
+// Patterns that could cause irreversible damage — PowerShell
+const BLOCKED_PATTERNS_WIN: RegExp[] = [
+  /Remove-Item\s+.*-Recurse.*-Force\s+[A-Z]:\\/i,  // Delete root of a drive
+  /Remove-Item\s+.*-Force.*-Recurse\s+[A-Z]:\\/i,
+  /(Invoke-Expression|iex)\s+.*Invoke-WebRequest/i, // Download & execute
+  /(Invoke-Expression|iex)\s+.*Invoke-RestMethod/i,
+  /(Invoke-Expression|iex)\s+.*curl/i,
+  /\b(Format-Volume|Format-Disk|Clear-Disk)\b/i,   // Disk formatting
+  /\bdd\s+.*of=\\\\\./i,                            // Raw device write (Win)
 ];
 
 export interface BashResult {
@@ -43,7 +54,10 @@ export async function executeBash(terminal: string, prompt: string): Promise<Bas
     };
   }
 
-  for (const pattern of BLOCKED_PATTERNS) {
+  const isWindows = process.platform === "win32";
+  const patterns = isWindows ? BLOCKED_PATTERNS_WIN : BLOCKED_PATTERNS_UNIX;
+
+  for (const pattern of patterns) {
     if (pattern.test(prompt)) {
       return {
         terminal,
@@ -56,10 +70,36 @@ export async function executeBash(terminal: string, prompt: string): Promise<Bas
 
   const cwd = await resolveCwd();
 
+  if (isWindows) {
+    return runPowerShell(terminal, prompt, cwd);
+  }
+  return runBash(terminal, prompt, cwd);
+}
+
+function runBash(terminal: string, prompt: string, cwd: string): Promise<BashResult> {
   return new Promise((resolve) => {
     execFile(
       "bash",
       ["-lc", prompt],
+      { cwd, timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER, encoding: "utf8" },
+      (error, stdout, stderr) => {
+        const exitCode =
+          error?.code !== undefined && typeof error.code === "number"
+            ? error.code
+            : error
+              ? 1
+              : 0;
+        resolve({ terminal, stdout: stdout ?? "", stderr: stderr ?? "", exitCode });
+      }
+    );
+  });
+}
+
+function runPowerShell(terminal: string, prompt: string, cwd: string): Promise<BashResult> {
+  return new Promise((resolve) => {
+    execFile(
+      "powershell.exe",
+      ["-NonInteractive", "-Command", prompt],
       { cwd, timeout: TIMEOUT_MS, maxBuffer: MAX_BUFFER, encoding: "utf8" },
       (error, stdout, stderr) => {
         const exitCode =
