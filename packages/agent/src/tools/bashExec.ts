@@ -68,6 +68,17 @@ export async function executeBash(terminal: string, prompt: string): Promise<Bas
     }
   }
 
+  // Reject file-write commands that bypass BASH_TOOL_CWD by using ~/
+  // The LLM should use write_file / edit_file for file operations instead.
+  if (/>\s*~\//.test(prompt) || /Out-File\s+.*~\//i.test(prompt) || /Set-Content\s+.*~\//i.test(prompt)) {
+    return {
+      terminal,
+      stdout: "",
+      stderr: "Cannot write files to the home directory (~/) via bash. Use the write_file tool instead — it handles encoding correctly and stores files in the configured workspace directory.",
+      exitCode: 1,
+    };
+  }
+
   const cwd = await resolveCwd();
 
   if (isWindows) {
