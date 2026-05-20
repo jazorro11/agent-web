@@ -70,6 +70,7 @@ export async function claimDueTasks(
     .select("*")
     .eq("status", "active")
     .lte("next_run_at", now)
+    .order("priority", { ascending: false })
     .order("next_run_at", { ascending: true })
     .limit(limit);
 
