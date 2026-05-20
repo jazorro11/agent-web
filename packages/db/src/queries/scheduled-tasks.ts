@@ -212,3 +212,22 @@ export async function failTaskRun(
     })
     .eq("id", params.taskId);
 }
+
+export async function searchTasksByTag(
+  db: DbClient,
+  userId: string,
+  tag: string
+): Promise<ScheduledTask[]> {
+  const { data, error } = await db
+    .from("scheduled_tasks")
+    .select("*")
+    .eq("user_id", userId)
+    .contains("tags", [tag])
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to search tasks by tag: ${error.message}`);
+  }
+
+  return (data || []) as ScheduledTask[];
+}
