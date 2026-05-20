@@ -115,6 +115,11 @@ export interface ScheduledTask {
   next_run_at?: string;
   created_at: string;
   updated_at: string;
+  name: string;
+  description?: string;
+  tags: string[];
+  priority: "low" | "medium" | "high";
+  max_retries: number;
 }
 
 export type TaskRunStatus = "running" | "completed" | "failed";
@@ -129,4 +134,7 @@ export interface ScheduledTaskRun {
   agent_session_id?: string;
   notified: boolean;
   notification_error?: string;
+  attempt_number: number;
+  retry_count: number;
+  retry_reason?: string;
 }
