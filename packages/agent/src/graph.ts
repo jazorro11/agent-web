@@ -393,8 +393,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     state: typeof GraphState.State,
     config?: RunnableConfig
   ): Promise<Partial<typeof GraphState.State>> {
+    console.log(`[agentNode] Invoked with ${state.messages.length} messages:`,
+      state.messages.map((m, i) => `${i}:${m.constructor.name}${m instanceof ToolMessage ? `(tc_id:${(m as ToolMessage).tool_call_id})` : ''}`));
     const lastAwaitingTools = state.messages[state.messages.length - 1];
     if (listPendingToolCallsFromMessage(lastAwaitingTools).length > 0) {
+      console.log(`[agentNode] Last message has pending tool calls, routing to tools`);
       return new Command({ goto: "tools" }) as unknown as Partial<typeof GraphState.State>;
     }
     const currentDate = new Date().toLocaleString("es", {
@@ -427,6 +430,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   ): Promise<Partial<typeof GraphState.State>> {
     const lastRaw = state.messages[state.messages.length - 1];
     const pending = listPendingToolCallsFromMessage(lastRaw);
+    console.log(`[toolExecutorNode] Found ${pending.length} pending tool calls`,
+      pending.map(p => ({ id: p.id, name: p.name })));
     if (!pending.length) {
       return {};
     }
@@ -445,14 +450,19 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
           await updateToolCallStatus(db, record.id, "approved");
 
           const autoHandler = TOOL_HANDLERS[toolId];
+          console.log(`[toolExecutorNode] bypassConfirmation executing: ${toolId} (tool_call_id: ${tc.id})`);
           try {
             const result = await autoHandler(tc.args as Record<string, unknown>, toolCtx);
             await updateToolCallStatus(db, record.id, "executed", result);
-            results.push(new ToolMessage({ content: JSON.stringify(result), tool_call_id: tc.id! }));
+            const toolMsg = new ToolMessage({ content: JSON.stringify(result), tool_call_id: tc.id! });
+            results.push(toolMsg);
+            console.log(`[toolExecutorNode] ✓ Created ToolMessage for ${tc.id}, results length: ${results.length}`);
           } catch (err) {
             const errResult = { error: String(err) };
             await updateToolCallStatus(db, record.id, "failed", errResult);
-            results.push(new ToolMessage({ content: JSON.stringify(errResult), tool_call_id: tc.id! }));
+            const toolMsg = new ToolMessage({ content: JSON.stringify(errResult), tool_call_id: tc.id! });
+            results.push(toolMsg);
+            console.log(`[toolExecutorNode] ✗ Tool failed, created error ToolMessage for ${tc.id}, results length: ${results.length}`);
           }
           continue;
         }
@@ -528,6 +538,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       }
     }
 
+    console.log(`[toolExecutorNode] Returning ${results.length} ToolMessages:`,
+      results.map(r => r instanceof ToolMessage ? `ToolMessage(${(r as ToolMessage).tool_call_id})` : `${r.constructor.name}`));
     return { messages: results };
   }
 
@@ -548,7 +560,12 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   /** After compaction, run tools before agent when the checkpoint tail is an assistant turn awaiting tool results. */
   function routeCompactionNext(state: typeof GraphState.State): "agent" | "tools" {
     const last = state.messages[state.messages.length - 1];
-    return listPendingToolCallsFromMessage(last).length > 0 ? "tools" : "agent";
+    console.log(`[routeCompactionNext] After compaction, state has ${state.messages.length} messages:`,
+      state.messages.map((m, i) => `${i}:${m.constructor.name}${m instanceof ToolMessage ? `(tc_id:${(m as ToolMessage).tool_call_id})` : ''}`));
+    const pending = listPendingToolCallsFromMessage(last);
+    const route = pending.length > 0 ? "tools" : "agent";
+    console.log(`[routeCompactionNext] Last message has ${pending.length} pending calls, routing to: ${route}`);
+    return route;
   }
 
   const memoryInjectionNode = createMemoryInjectionNode({ db, userId });
@@ -657,6 +674,24 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   }
 
   // Normal completion
+  // Persist all tool messages + final assistant message to ensure checkpointer consistency
+  const userMessageIndex = finalState.messages.findIndex(
+    (m) => m._getType && m._getType() === "human"
+  );
+  const newMessages = finalState.messages.slice(userMessageIndex + 1);
+
+  for (const msg of newMessages) {
+    const msgType = msg._getType?.();
+    if (msgType === "tool") {
+      const toolMsg = msg as ToolMessage;
+      const toolContent = typeof toolMsg.content === "string" ? toolMsg.content : JSON.stringify(toolMsg.content);
+      await addMessage(db, sessionId, "tool", toolContent, {
+        tool_call_id: toolMsg.tool_call_id,
+      });
+    }
+  }
+
+  // Persist the final assistant message
   const lastMessage = finalState.messages[finalState.messages.length - 1];
   const responseText =
     typeof lastMessage.content === "string"

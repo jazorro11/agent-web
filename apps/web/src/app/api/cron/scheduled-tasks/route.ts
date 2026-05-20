@@ -265,7 +265,9 @@ function buildNotificationText(task: ScheduledTask, response: string): string {
   const scheduleLabel =
     task.schedule_type === "recurring" ? `[Tarea recurrente]` : `[Tarea programada]`;
 
-  const preview = response.length > 2000 ? `${response.slice(0, 2000)}…` : response;
+  // Handle empty responses
+  const safeResponse = response?.trim() || `Tarea "${task.name || "sin nombre"}" ejecutada correctamente.`;
+  const preview = safeResponse.length > 2000 ? `${safeResponse.slice(0, 2000)}…` : safeResponse;
 
   return `${scheduleLabel}\n\n${preview}`;
 }
