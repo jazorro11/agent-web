@@ -323,61 +323,68 @@ export const TOOL_HANDLERS: ToolHandlers = {
     );
   },
 
-  schedule_task: async (
-    input: {
-      prompt: string;
-      schedule_type: "one_time" | "recurring";
-      run_at?: string;
-      cron_expr?: string;
-      timezone?: string;
-    },
-    ctx: ToolContext
-  ) => {
+  schedule_task: async (input, ctx) => {
     const { Cron } = await import("croner");
-    const { createScheduledTask } = await import("@agents/db");
-    const { getProfile } = await import("@agents/db");
+    const { createScheduledTask, getProfile } = await import("@agents/db");
 
     const profile = await getProfile(ctx.db, ctx.userId);
-    const tz = input.timezone ?? profile.timezone ?? "UTC";
+
+    if (!input.name?.trim()) {
+      throw new Error("Task name cannot be empty");
+    }
+
+    if (input.scheduleType === "one_time" && !input.runAt) {
+      throw new Error("runAt is required for one_time schedules");
+    }
+    if (input.scheduleType === "recurring" && !input.cronExpr) {
+      throw new Error("cronExpr is required for recurring schedules");
+    }
+
+    const tz = input.timezone ?? profile?.timezone ?? "UTC";
 
     let nextRunAt: string;
-
-    if (input.schedule_type === "one_time") {
-      if (!input.run_at) throw new Error("run_at is required for one_time tasks");
-      nextRunAt = new Date(input.run_at).toISOString();
+    if (input.scheduleType === "one_time") {
+      nextRunAt = input.runAt!;
     } else {
-      if (!input.cron_expr) throw new Error("cron_expr is required for recurring tasks");
-      const job = new Cron(input.cron_expr, { timezone: tz });
-      const next = job.nextRun();
-      if (!next) throw new Error("Could not compute next run from cron expression");
-      nextRunAt = next.toISOString();
+      try {
+        const job = new Cron(input.cronExpr!, { timezone: tz });
+        const next = job.nextRun();
+        if (!next) {
+          throw new Error("Could not compute next run from cron expression");
+        }
+        nextRunAt = next.toISOString();
+      } catch (error) {
+        throw new Error(`Invalid cron expression: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
 
     const task = await createScheduledTask(ctx.db, {
       userId: ctx.userId,
       prompt: input.prompt,
-      scheduleType: input.schedule_type,
-      runAt: input.run_at,
-      cronExpr: input.cron_expr,
+      scheduleType: input.scheduleType,
+      runAt: input.scheduleType === "one_time" ? input.runAt : undefined,
+      cronExpr: input.scheduleType === "recurring" ? input.cronExpr : undefined,
       timezone: tz,
       nextRunAt,
+      name: input.name.trim(),
+      description: input.description?.trim(),
+      tags: input.tags ?? [],
+      priority: input.priority ?? "medium",
+      maxRetries: Math.min(input.maxRetries ?? 0, 10)
     });
 
-    const readableTime = new Date(nextRunAt).toLocaleString("es", {
-      timeZone: tz,
-      dateStyle: "full",
-      timeStyle: "short",
-    });
+    const scheduleDateStr = input.scheduleType === "one_time"
+      ? new Date(input.runAt!).toLocaleString("es-CO", { timeZone: tz })
+      : `${input.cronExpr} (${tz})`;
 
     return {
       ok: true,
-      task_id: task.id,
-      schedule_type: task.schedule_type,
-      next_run_at: nextRunAt,
-      message:
-        input.schedule_type === "one_time"
-          ? `Tarea programada para el ${readableTime} (${tz}). Recibirás el resultado por Telegram.`
-          : `Tarea recurrente creada con expresión "${input.cron_expr}". Próxima ejecución: ${readableTime} (${tz}).`,
+      taskId: task.id,
+      name: task.name,
+      priority: task.priority,
+      maxRetries: task.max_retries,
+      nextRunAt: task.next_run_at,
+      message: `Task "${task.name}" scheduled for ${scheduleDateStr}`
     };
   },
 };

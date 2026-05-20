@@ -11,11 +11,16 @@ export async function createScheduledTask(
   params: {
     userId: string;
     prompt: string;
-    scheduleType: ScheduleType;
+    scheduleType: "one_time" | "recurring";
     runAt?: string;
     cronExpr?: string;
-    timezone?: string;
+    timezone: string;
     nextRunAt: string;
+    name: string;
+    description?: string;
+    tags?: string[];
+    priority?: "low" | "medium" | "high";
+    maxRetries?: number;
   }
 ): Promise<ScheduledTask> {
   const { data, error } = await db
@@ -24,15 +29,24 @@ export async function createScheduledTask(
       user_id: params.userId,
       prompt: params.prompt,
       schedule_type: params.scheduleType,
-      run_at: params.runAt ?? null,
-      cron_expr: params.cronExpr ?? null,
-      timezone: params.timezone ?? "UTC",
-      status: "active",
+      run_at: params.runAt,
+      cron_expr: params.cronExpr,
+      timezone: params.timezone,
       next_run_at: params.nextRunAt,
+      status: "active",
+      name: params.name,
+      description: params.description,
+      tags: params.tags ?? [],
+      priority: params.priority ?? "medium",
+      max_retries: params.maxRetries ?? 0
     })
     .select()
     .single();
-  if (error) throw error;
+
+  if (error) {
+    throw new Error(`Failed to create scheduled task: ${error.message}`);
+  }
+
   return data as ScheduledTask;
 }
 
