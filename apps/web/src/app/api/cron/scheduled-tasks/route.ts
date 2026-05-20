@@ -185,7 +185,7 @@ async function executeTask(
   db: ReturnType<typeof createServerClient>,
   task: ScheduledTask
 ): Promise<void> {
-  const run = await createTaskRun(db, task.id);
+  const run = await createTaskRun(db, { taskId: task.id });
   let sessionId: string | undefined;
 
   try {
