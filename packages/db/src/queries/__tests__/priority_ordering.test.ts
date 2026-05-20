@@ -10,12 +10,12 @@ import type { ScheduledTask } from "@agents/types";
 function sortTasksByPriorityAndTime(
   tasks: Partial<ScheduledTask>[]
 ): Partial<ScheduledTask>[] {
-  const priorityOrder = { high: 3, medium: 2, low: 1 };
+  const priorityOrder: Record<string, number> = { high: 3, medium: 2, low: 1 };
 
   return tasks.sort((a, b) => {
     // Priority DESC: high (3) > medium (2) > low (1)
-    const aPriority = priorityOrder[(a.priority as string) || "medium"] || 0;
-    const bPriority = priorityOrder[(b.priority as string) || "medium"] || 0;
+    const aPriority = priorityOrder[a.priority || "medium"] || 0;
+    const bPriority = priorityOrder[b.priority || "medium"] || 0;
     const priorityDiff = bPriority - aPriority;
 
     if (priorityDiff !== 0) return priorityDiff;
