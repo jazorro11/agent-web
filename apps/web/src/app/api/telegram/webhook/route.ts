@@ -436,11 +436,8 @@ export async function POST(request: Request) {
     .eq("id", session.id);
 
   try {
-    console.log("[webhook] Starting runAgent with message:", text.substring(0, 100));
     const ctx = await buildAgentContext(db, userId, session.id);
-    console.log("[webhook] buildAgentContext complete, enabledTools:", ctx.enabledTools.map(t => t.tool_id));
     const result = await runAgent({ ...ctx, message: text });
-    console.log("[webhook] runAgent completed successfully, responseType:", result.responseType);
 
     if (result.responseType === "pending_confirmation" && result.pendingConfirmation) {
       // Send the agent's conversational reply first if different from the confirmation prompt
@@ -465,11 +462,7 @@ export async function POST(request: Request) {
       await sendTelegramMessage(chatId, result.response);
     }
   } catch (error) {
-    console.error("[webhook] Telegram agent error - type:", error instanceof Error ? error.constructor.name : typeof error);
-    console.error("[webhook] Telegram agent error details:", error);
-    if (error instanceof Error) {
-      console.error("[webhook] Error stack:", error.stack);
-    }
+    console.error("Telegram agent error:", error);
     await sendTelegramMessage(chatId, "Hubo un error procesando tu mensaje. Intenta de nuevo.");
   }
 
