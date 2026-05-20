@@ -16,5 +16,5 @@ export {
   getScheduledTask,
   listScheduledTasksByUser,
   searchTasksByTag
-} from "./queries/scheduled-tasks.js";
+} from "./queries/scheduled-tasks";
 export * from "./queries/memories";
