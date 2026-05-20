@@ -117,19 +117,33 @@ export async function listScheduledTasksByUser(
 
 export async function createTaskRun(
   db: DbClient,
-  taskId: string,
-  agentSessionId?: string
+  params: {
+    taskId: string;
+    agentSessionId?: string;
+    attemptNumber?: number;
+    retryCount?: number;
+    retryReason?: string;
+  }
 ): Promise<ScheduledTaskRun> {
   const { data, error } = await db
     .from("scheduled_task_runs")
     .insert({
-      task_id: taskId,
+      task_id: params.taskId,
+      agent_session_id: params.agentSessionId,
       status: "running",
-      agent_session_id: agentSessionId ?? null,
+      started_at: new Date().toISOString(),
+      notified: false,
+      attempt_number: params.attemptNumber ?? 1,
+      retry_count: params.retryCount ?? 0,
+      retry_reason: params.retryReason
     })
     .select()
     .single();
-  if (error) throw error;
+
+  if (error) {
+    throw new Error(`Failed to create task run: ${error.message}`);
+  }
+
   return data as ScheduledTaskRun;
 }
 
