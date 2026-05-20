@@ -167,7 +167,7 @@ export async function POST(request: Request) {
   }
 
   const results = await Promise.allSettled(
-    tasks.map((task) => executeTask(db, task))
+    tasks.map((task) => handleTaskWithRetry(db, task))
   );
 
   const summary = results.map((r, i) => ({
@@ -181,49 +181,83 @@ export async function POST(request: Request) {
   return NextResponse.json({ processed: tasks.length, results: summary });
 }
 
-async function executeTask(
+async function handleTaskWithRetry(
   db: ReturnType<typeof createServerClient>,
   task: ScheduledTask
 ): Promise<void> {
-  const run = await createTaskRun(db, task.id);
-  let sessionId: string | undefined;
+  const maxAttempts = task.max_retries + 1;
+  let lastError: string = "";
+  let lastSessionId: string | undefined;
 
-  try {
-    sessionId = await getOrCreateCronSession(db, task.user_id, task.id);
-    const ctx = await buildAgentContextForTask(db, task.user_id, sessionId);
+  for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
+    const retryCount = attemptNumber - 1;
 
-    const result = await runAgent({ ...ctx, message: task.prompt, bypassConfirmation: true });
-
-    const nextRunAt = computeNextRunAt(task);
-    const newStatus = task.schedule_type === "one_time" ? "completed" : "active";
-
-    // Notify user via Telegram
-    const notificationText = buildNotificationText(task, result.response);
-    const { notified, reason } = await notifyUserViaTelegram(db, task.user_id, notificationText);
-
-    await completeTaskRun(db, {
-      runId: run.id,
+    // Create task run for this attempt
+    const run = await createTaskRun(db, {
       taskId: task.id,
-      agentSessionId: sessionId,
-      nextRunAt: newStatus === "active" ? nextRunAt : null,
-      newStatus,
-      notified,
-      notificationError: reason,
+      attemptNumber,
+      retryCount,
+      retryReason: retryCount > 0 ? lastError : undefined,
     });
-  } catch (err) {
-    const errorMessage = String(err);
-    console.error(`[cron] Task ${task.id} failed:`, err);
 
-    const nextRunAt = computeNextRunAt(task);
+    try {
+      // Get or create session and build context
+      lastSessionId = await getOrCreateCronSession(db, task.user_id, task.id);
+      const ctx = await buildAgentContextForTask(db, task.user_id, lastSessionId);
 
-    await failTaskRun(db, {
-      runId: run.id,
-      taskId: task.id,
-      errorMessage,
-      // Keep recurring tasks active so they retry next cycle; one-time tasks stay active too
-      // so a human can inspect and retry; status is not changed to 'failed' here.
-      nextRunAt,
-    });
+      // Execute agent
+      const result = await runAgent({ ...ctx, message: task.prompt, bypassConfirmation: true });
+
+      // Success path: complete the run and notify
+      const nextRunAt = computeNextRunAt(task);
+      const newStatus = task.schedule_type === "one_time" ? "completed" : "active";
+
+      const notificationText = buildNotificationText(task, result.response);
+      const { notified, reason } = await notifyUserViaTelegram(db, task.user_id, notificationText);
+
+      await completeTaskRun(db, {
+        runId: run.id,
+        taskId: task.id,
+        agentSessionId: lastSessionId,
+        nextRunAt: newStatus === "active" ? nextRunAt : null,
+        newStatus,
+        notified,
+        notificationError: reason,
+      });
+
+      // Exit on success
+      return;
+    } catch (err) {
+      lastError = String(err).substring(0, 500);
+      console.error(`[cron] Task ${task.id} attempt ${attemptNumber}/${maxAttempts} failed:`, err);
+
+      // Check if more retries available
+      if (attemptNumber < maxAttempts) {
+        // Calculate exponential backoff delay
+        const delayMs = Math.pow(2, attemptNumber - 1) * 1000;
+        console.log(`[cron] Task ${task.id} will retry in ${delayMs}ms`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      // No more retries: fail the task permanently
+      const nextRunAt = computeNextRunAt(task);
+
+      // Build failure notification with retry info
+      const taskName = task.name ? ` "${task.name}"` : "";
+      const failureMessage = `Tarea${taskName} falló después de ${attemptNumber} intentos: ${lastError}`;
+      const { notified, reason } = await notifyUserViaTelegram(db, task.user_id, failureMessage);
+
+      await failTaskRun(db, {
+        runId: run.id,
+        taskId: task.id,
+        errorMessage: lastError,
+        nextRunAt,
+      });
+
+      // Exit after permanent failure
+      return;
+    }
   }
 }
 

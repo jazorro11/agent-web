@@ -93,12 +93,46 @@ function buildConfirmationMessage(
       return `Se requiere confirmación para ejecutar el siguiente comando bash${terminal}:\n\`\`\`\n${preview}\n\`\`\``;
     }
     case "schedule_task": {
-      const schedType = args.schedule_type === "recurring" ? "recurrente" : "una sola vez";
-      const when =
-        args.schedule_type === "one_time"
-          ? `el ${new Date(args.run_at as string).toLocaleString("es")}`
-          : `con expresión cron "${args.cron_expr}"`;
-      return `Se requiere confirmación para programar una tarea (${schedType}) ${when}.\n\nPrompt: "${args.prompt}"`;
+      const {
+        name,
+        description,
+        scheduleType,
+        priority,
+        maxRetries,
+        cronExpr,
+        runAt,
+        timezone,
+        tags
+      } = args as any;
+
+      const scheduleInfo = scheduleType === "one_time"
+        ? `one-time: ${new Date(runAt).toLocaleString("es-CO")}`
+        : `recurring: ${cronExpr}`;
+
+      const priorityMap: Record<string, string> = {
+        low: "🟢",
+        medium: "🟡",
+        high: "🔴"
+      };
+      const priorityEmoji = priorityMap[String(priority)] || "🟡";
+
+      const tagsStr = Array.isArray(tags) && tags.length > 0
+        ? tags.join(", ")
+        : "none";
+
+      return `
+Se requiere confirmación para programar una tarea:
+
+📋 **${name}**
+${description ? `   ${description}\n` : ""}
+⏱️ Cuándo: ${scheduleInfo}
+🌍 Timezone: ${timezone}
+${priorityEmoji} Prioridad: ${priority}
+🔄 Reintentos: ${maxRetries} (si falla)
+🏷️ Tags: ${tagsStr}
+
+¿Aprobar esta tarea?
+  `.trim();
     }
     case "google_calendar_create_event": {
       const cal = args.calendarId ? String(args.calendarId) : "primary";

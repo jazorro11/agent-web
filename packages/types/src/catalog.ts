@@ -294,8 +294,32 @@ export const TOOL_CATALOG: ToolDefinition[] = [
           type: "string",
           description: "IANA timezone name (e.g. 'America/Bogota'). Defaults to user timezone.",
         },
+        name: {
+          type: "string",
+          description: "Human-readable name for the task (required)",
+        },
+        description: {
+          type: "string",
+          description: "Optional description of what the task does",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tags for organizing tasks (e.g., ['reports', 'weekly'])",
+        },
+        priority: {
+          type: "string",
+          enum: ["low", "medium", "high"],
+          description: "Priority if multiple tasks run at same time (default: medium)",
+        },
+        max_retries: {
+          type: "integer",
+          minimum: 0,
+          maximum: 10,
+          description: "Max retry attempts if task fails (default: 0)",
+        },
       },
-      required: ["prompt", "schedule_type"],
+      required: ["prompt", "schedule_type", "name"],
     },
     displayName: "Programar tarea",
     displayDescription:

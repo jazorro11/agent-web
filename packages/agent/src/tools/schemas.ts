@@ -98,38 +98,25 @@ export const TOOL_SCHEMAS = {
     terminal: z.string().describe("Terminal identifier for correlation and logging"),
     prompt: z.string().max(4096).describe("Bash command to execute"),
   }),
-  schedule_task: z
-    .object({
-      prompt: z.string().min(1).describe("The instruction the agent will run when the task fires."),
-      schedule_type: z
-        .enum(["one_time", "recurring"])
-        .describe("Whether this is a single execution or a recurring one."),
-      run_at: z
-        .string()
-        .optional()
-        .describe("ISO 8601 datetime for one_time tasks (e.g. '2026-04-10T09:00:00Z')."),
-      cron_expr: z
-        .string()
-        .optional()
-        .describe(
-          "5-field cron expression for recurring tasks (e.g. '0 9 * * 1' = every Monday 9 AM)."
-        ),
-      timezone: z
-        .string()
-        .optional()
-        .describe("IANA timezone name (e.g. 'America/Bogota'). Defaults to user timezone."),
-    })
-    .refine(
-      (data) => {
-        if (data.schedule_type === "one_time") return !!data.run_at;
-        if (data.schedule_type === "recurring") return !!data.cron_expr;
-        return false;
-      },
-      {
-        message:
-          "one_time tasks require run_at; recurring tasks require cron_expr.",
-      }
-    ),
+  schedule_task: z.object({
+    prompt: z.string().min(1, "Prompt cannot be empty"),
+    scheduleType: z.enum(["one_time", "recurring"]),
+    runAt: z.string().datetime().optional(),
+    cronExpr: z.string().optional(),
+    timezone: z.string().optional(),
+    name: z.string().min(1, "Task name cannot be empty").max(255, "Task name must be at most 255 characters"),
+    description: z.string().optional(),
+    tags: z.array(z.string()).optional().default([]),
+    priority: z.enum(["low", "medium", "high"]).optional().default("medium"),
+    maxRetries: z.number().int().min(0).max(10).optional().default(0)
+  })
+  .refine(
+    (obj) => obj.scheduleType === "one_time" ? !!obj.runAt : !!obj.cronExpr,
+    {
+      message: "one_time requires runAt, recurring requires cronExpr",
+      path: ["scheduleType"]
+    }
+  ),
   notion_search: z.object({
     query: z.string().min(1),
     filter: z.enum(["page", "database"]).optional(),
