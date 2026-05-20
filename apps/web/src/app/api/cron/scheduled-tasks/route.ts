@@ -228,7 +228,7 @@ async function handleTaskWithRetry(
       // Exit on success
       return;
     } catch (err) {
-      lastError = String(err);
+      lastError = String(err).substring(0, 500);
       console.error(`[cron] Task ${task.id} attempt ${attemptNumber}/${maxAttempts} failed:`, err);
 
       // Check if more retries available

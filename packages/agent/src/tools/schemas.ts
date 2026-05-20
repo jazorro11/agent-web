@@ -104,7 +104,7 @@ export const TOOL_SCHEMAS = {
     runAt: z.string().datetime().optional(),
     cronExpr: z.string().optional(),
     timezone: z.string().optional(),
-    name: z.string().min(1, "Task name cannot be empty"),
+    name: z.string().min(1, "Task name cannot be empty").max(255, "Task name must be at most 255 characters"),
     description: z.string().optional(),
     tags: z.array(z.string()).optional().default([]),
     priority: z.enum(["low", "medium", "high"]).optional().default("medium"),
