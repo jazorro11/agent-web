@@ -1,9 +1,11 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { DbClient } from "@agents/db";
-import { getSessionMessages, saveMemory } from "@agents/db";
+import { getSessionMessages, saveMemory, findSimilarMemory, updateMemory } from "@agents/db";
 import type { MemoryType } from "@agents/db";
 import { generateEmbedding } from "./embeddings";
+
+const DEDUP_THRESHOLD = 0.92;
 
 const EXTRACTION_SYSTEM_PROMPT = `Eres un extractor de memoria a largo plazo para un agente de IA.
 
@@ -61,6 +63,25 @@ function formatTranscript(
       return `[${role}]: ${m.content}`;
     })
     .join("\n\n");
+}
+
+const MERGE_SYSTEM_PROMPT = `Combina dos memorias que expresan información similar en una sola memoria más completa y concisa.
+No pierdas información específica (fechas, nombres, datos concretos).
+Responde ÚNICAMENTE con el texto de la memoria combinada, sin explicaciones ni formato.`;
+
+async function mergeMemoryContent(
+  model: ChatOpenAI,
+  existing: string,
+  incoming: string
+): Promise<string> {
+  const response = await model.invoke([
+    new SystemMessage(MERGE_SYSTEM_PROMPT),
+    new HumanMessage(
+      `Memoria existente:\n${existing}\n\nNueva memoria:\n${incoming}\n\nCombina estas dos:`
+    ),
+  ]);
+  const result = typeof response.content === "string" ? response.content.trim() : "";
+  return result || existing;
 }
 
 function parseExtractedMemories(raw: string): ExtractedMemory[] {
@@ -144,20 +165,29 @@ export async function flushSessionMemory(params: {
   const memories = parseExtractedMemories(rawResponse);
   if (memories.length === 0) return;
 
-  // Generate embeddings and save concurrently but cap parallelism to avoid
-  // rate-limit bursts; process in pairs
+  // Generate embeddings and upsert concurrently (in pairs to avoid rate-limit bursts).
+  // For each memory: if a semantically similar one (same type, cosine >= DEDUP_THRESHOLD)
+  // already exists, merge both contents with the LLM and update the existing row.
+  // Otherwise insert as new.
   for (let i = 0; i < memories.length; i += 2) {
     const batch = memories.slice(i, i + 2);
     await Promise.allSettled(
       batch.map(async (mem) => {
         try {
           const embedding = await generateEmbedding(mem.content);
-          await saveMemory(db, {
+          const similar = await findSimilarMemory(db, {
             userId,
             type: mem.type,
-            content: mem.content,
             embedding,
+            threshold: DEDUP_THRESHOLD,
           });
+          if (similar) {
+            const merged = await mergeMemoryContent(model, similar.content, mem.content);
+            const mergedEmbedding = await generateEmbedding(merged);
+            await updateMemory(db, { id: similar.id, content: merged, embedding: mergedEmbedding });
+          } else {
+            await saveMemory(db, { userId, type: mem.type, content: mem.content, embedding });
+          }
         } catch (err) {
           console.error("[memory_flush] failed to save memory:", mem.content, err);
         }
