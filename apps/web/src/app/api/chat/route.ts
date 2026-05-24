@@ -19,6 +19,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message too long (max 10,000 characters)" }, { status: 400 });
     }
 
+    const { data: allowed } = await supabase.rpc("check_and_increment_rate_limit", {
+      p_user_id: user.id,
+    });
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Has alcanzado el límite diario de 10 mensajes. Vuelve mañana." },
+        { status: 429 }
+      );
+    }
+
     const db = createServerClient();
 
     const { data: profile } = await supabase
@@ -149,8 +159,6 @@ export async function POST(request: Request) {
       notionToken,
     });
 
-    // Fire-and-forget: extract long-term memories after a normal completion.
-    // Only skipped when the graph is paused waiting for HITL confirmation.
     if (!result.pendingConfirmation) {
       flushSessionMemory({ db, userId: user.id, sessionId: session.id }).catch(
         (err) => console.error("[chat] memory flush failed:", err)
