@@ -3,7 +3,31 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SITE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "DATABASE_URL",
+        "OPENROUTER_API_KEY",
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_OAUTH_BASE_URL",
+        "NOTION_CLIENT_ID",
+        "NOTION_CLIENT_SECRET",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_WEBHOOK_SECRET",
+        "TELEGRAM_WEBHOOK_BASE_URL",
+        "OAUTH_ENCRYPTION_KEY",
+        "BASH_TOOL_ENABLED",
+        "BASH_TOOL_CWD",
+        "FILE_TOOLS_ENABLED",
+        "FILE_TOOLS_ROOT",
+        "CRON_SECRET"
+      ]
     },
     "dev": {
       "cache": false,
