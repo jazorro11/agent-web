@@ -39,6 +39,12 @@ export function SignupForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+        <span className="font-medium">💡 ¿Explorando la demo?</span>{" "}
+        Puedes usar un correo alterno y una contraseña sencilla (mín. 6
+        caracteres) para probar las funciones sin comprometer tus credenciales
+        reales.
+      </div>
       {error && (
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400">
           {error}
@@ -78,6 +84,24 @@ export function SignupForm() {
       >
         {loading ? "Creando cuenta..." : "Crear cuenta"}
       </button>
+      <p className="flex items-center justify-center gap-1.5 pt-1 text-xs text-neutral-500 dark:text-neutral-400">
+        <svg
+          className="h-3.5 w-3.5 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+          />
+        </svg>
+        Contraseña cifrada · Cookies seguras HTTPOnly · Datos protegidos por
+        Row-Level Security
+      </p>
     </form>
   );
 }
