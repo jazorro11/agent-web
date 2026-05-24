@@ -1,22 +1,17 @@
 import { access, constants, mkdir, open, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, normalize, resolve, sep } from "node:path";
 import { randomBytes } from "node:crypto";
+import { agentDebug } from "../logger";
 
 const MAX_READ_LINES = 2_000;
 const MAX_CONTENT_BYTES = 2 * 1024 * 1024; // 2 MB
 
 // ---------------------------------------------------------------------------
 // Path resolution — confined to FILE_TOOLS_ROOT (defaults to process.cwd())
+// Root is read from process.env on every call so env changes take effect
+// without requiring a full module reload.
 // ---------------------------------------------------------------------------
 
-const FILE_TOOLS_ROOT = normalize(
-  resolve(process.env.FILE_TOOLS_ROOT ?? process.cwd())
-);
-
-/**
- * Resolves `userPath` to an absolute path and ensures it stays within FILE_TOOLS_ROOT.
- * Returns `{ ok: false }` when the tool is disabled or the path escapes the root.
- */
 function safePath(
   userPath: string
 ): { ok: true; resolved: string } | { ok: false; code: string; message: string } {
@@ -28,17 +23,25 @@ function safePath(
     };
   }
 
-  const resolved = normalize(isAbsolute(userPath) ? userPath : resolve(FILE_TOOLS_ROOT, userPath));
+  const fileToolsRoot = normalize(resolve(process.env.FILE_TOOLS_ROOT ?? process.cwd()));
+  const resolved = normalize(isAbsolute(userPath) ? userPath : resolve(fileToolsRoot, userPath));
 
-  // Ensure path is inside FILE_TOOLS_ROOT (add sep to prevent prefix-only match)
-  if (resolved !== FILE_TOOLS_ROOT && !resolved.startsWith(FILE_TOOLS_ROOT + sep)) {
+  agentDebug(`[fileTools] FILE_TOOLS_ROOT env: ${process.env.FILE_TOOLS_ROOT ?? "(unset)"}`);
+  agentDebug(`[fileTools] fileToolsRoot resolved: ${fileToolsRoot}`);
+  agentDebug(`[fileTools] userPath received: ${userPath}`);
+  agentDebug(`[fileTools] resolved path: ${resolved}`);
+
+  // Ensure path is inside fileToolsRoot (add sep to prevent prefix-only match)
+  if (resolved !== fileToolsRoot && !resolved.startsWith(fileToolsRoot + sep)) {
+    agentDebug(`[fileTools] PATH_OUTSIDE_ROOT — rejecting`);
     return {
       ok: false,
       code: "PATH_OUTSIDE_ROOT",
-      message: `Access denied: path is outside the allowed root (${FILE_TOOLS_ROOT}).`,
+      message: `Access denied: path is outside the allowed root (${fileToolsRoot}). Use relative paths or absolute paths within ${fileToolsRoot}.`,
     };
   }
 
+  agentDebug(`[fileTools] Path OK — proceeding`);
   return { ok: true, resolved };
 }
 

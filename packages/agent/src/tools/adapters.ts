@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { DbClient } from "@agents/db";
 import type { UserToolSetting, UserIntegration } from "@agents/types";
 import { TOOL_CATALOG } from "@agents/types";
+import { agentDebug } from "../logger";
 import { TOOL_SCHEMAS } from "./schemas";
 import { withTracking } from "./withTracking";
 import { executeBash } from "./bashExec";
@@ -30,15 +31,22 @@ export interface ToolContext {
 
 function isToolAvailable(toolId: string, ctx: ToolContext): boolean {
   const setting = ctx.enabledTools.find((t) => t.tool_id === toolId);
-  if (!setting?.enabled) return false;
+  if (!setting?.enabled) {
+    agentDebug(`[tools] SKIP ${toolId}: not in enabledTools or disabled`);
+    return false;
+  }
 
   const def = TOOL_CATALOG.find((t) => t.id === toolId);
   if (def?.requires_integration) {
     const hasIntegration = ctx.integrations.some(
       (i) => i.provider === def.requires_integration && i.status === "active"
     );
-    if (!hasIntegration) return false;
+    if (!hasIntegration) {
+      agentDebug(`[tools] SKIP ${toolId}: requires integration '${def.requires_integration}' but none active`);
+      return false;
+    }
   }
+  agentDebug(`[tools] MOUNT ${toolId}: available`);
   return true;
 }
 
@@ -410,5 +418,6 @@ export function buildLangChainTools(ctx: ToolContext) {
     );
   }
 
+  agentDebug(`[tools] Total mounted: ${tools.length} —`, tools.map(t => t.name));
   return tools;
 }
