@@ -174,8 +174,46 @@ export async function compactionNode(
     return { messages: afterMicro };
   }
 
-  const tail = afterMicro.slice(-COMPACTION_TAIL_SIZE);
-  const toSummarize = afterMicro.slice(0, afterMicro.length - COMPACTION_TAIL_SIZE);
+  // Keep enough messages to preserve tool call/response pairs intact.
+  // Scan backwards from the end to find a safe split point that doesn't separate
+  // an AIMessage(tool_calls) from its following ToolMessages.
+  let tailStartIdx = afterMicro.length - COMPACTION_TAIL_SIZE;
+
+  // Scan back to find an AIMessage with tool_calls or a point before any pending pairs
+  while (tailStartIdx > 0) {
+    const msg = afterMicro[tailStartIdx];
+    // If we're at an AIMessage with tool_calls, we MUST include all following ToolMessages
+    if (msg instanceof AIMessage && msg.tool_calls?.length) {
+      // Advance tailStartIdx past all immediately following ToolMessages
+      let idx = tailStartIdx + 1;
+      while (idx < afterMicro.length && afterMicro[idx] instanceof ToolMessage) {
+        idx++;
+      }
+      tailStartIdx = idx;
+      break;
+    }
+    // Also check if we're in the middle of a tool call sequence
+    // (AIMessage followed by ToolMessages) - if so, back up to before the AIMessage
+    if (msg instanceof ToolMessage) {
+      let idx = tailStartIdx - 1;
+      while (idx >= 0 && !(afterMicro[idx] instanceof AIMessage)) {
+        idx--;
+      }
+      if (idx >= 0 && afterMicro[idx] instanceof AIMessage && (afterMicro[idx] as AIMessage).tool_calls?.length) {
+        tailStartIdx = idx;
+        break;
+      }
+    }
+    tailStartIdx--;
+  }
+
+  // Ensure we still have a tail (don't compress everything)
+  if (tailStartIdx >= afterMicro.length - 2) {
+    tailStartIdx = Math.max(0, afterMicro.length - COMPACTION_TAIL_SIZE);
+  }
+
+  const tail = afterMicro.slice(tailStartIdx);
+  const toSummarize = afterMicro.slice(0, tailStartIdx);
 
   try {
     const summary = await llmCompact(toSummarize, config);

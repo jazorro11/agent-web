@@ -320,6 +320,42 @@ function listPendingToolCallsFromMessage(lastRaw: BaseMessage): Array<{
   return [];
 }
 
+/**
+ * If this thread's graph is paused at a human-confirmation interrupt that was
+ * never answered, auto-reject it so the pending tool call is closed with a
+ * ToolMessage before a new user message is appended.
+ *
+ * Without this, a user who ignores the Approve/Reject buttons and just sends
+ * another message leaves an assistant `tool_calls` message with no ToolMessage
+ * response — which the LLM provider rejects on the next turn.
+ */
+async function resolvePendingInterrupt(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  app: any,
+  config: RunnableConfig
+): Promise<void> {
+  let snapshot: { tasks?: Array<{ interrupts?: unknown[] }> };
+  try {
+    snapshot = await app.getState(config);
+  } catch {
+    return;
+  }
+
+  const paused = (snapshot?.tasks ?? []).some(
+    (t) => Array.isArray(t.interrupts) && t.interrupts.length > 0
+  );
+  if (!paused) return;
+
+  console.error(
+    `[interrupt-resolve] New message arrived while thread ${(config.configurable as Record<string, string>)?.thread_id} awaited confirmation. Auto-rejecting the pending action.`
+  );
+  try {
+    await app.invoke(new Command({ resume: "reject" }), config);
+  } catch (err) {
+    console.error("[interrupt-resolve] Failed to auto-reject pending interrupt:", err);
+  }
+}
+
 export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const {
     message,
@@ -448,11 +484,13 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
           try {
             const result = await autoHandler(tc.args as Record<string, unknown>, toolCtx);
             await updateToolCallStatus(db, record.id, "executed", result);
-            results.push(new ToolMessage({ content: JSON.stringify(result), tool_call_id: tc.id! }));
+            const toolMsg = new ToolMessage({ content: JSON.stringify(result), tool_call_id: tc.id! });
+            results.push(toolMsg);
           } catch (err) {
             const errResult = { error: String(err) };
             await updateToolCallStatus(db, record.id, "failed", errResult);
-            results.push(new ToolMessage({ content: JSON.stringify(errResult), tool_call_id: tc.id! }));
+            const toolMsg = new ToolMessage({ content: JSON.stringify(errResult), tool_call_id: tc.id! });
+            results.push(toolMsg);
           }
           continue;
         }
@@ -601,6 +639,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       config
     );
   } else {
+    // If a previous turn is still paused awaiting confirmation (user ignored the
+    // Approve/Reject buttons), close it out first so this message isn't appended
+    // after an unanswered tool call.
+    await resolvePendingInterrupt(app, config);
+
     // New message — persist to DB (audit log) then append to checkpointer state.
     // The checkpointer is the sole source of truth for message history; we never
     // reconstruct from DB to avoid duplicating messages across invocations.
@@ -657,6 +700,24 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   }
 
   // Normal completion
+  // Persist all tool messages + final assistant message to ensure checkpointer consistency
+  const userMessageIndex = finalState.messages.findIndex(
+    (m) => m._getType && m._getType() === "human"
+  );
+  const newMessages = finalState.messages.slice(userMessageIndex + 1);
+
+  for (const msg of newMessages) {
+    const msgType = msg._getType?.();
+    if (msgType === "tool") {
+      const toolMsg = msg as ToolMessage;
+      const toolContent = typeof toolMsg.content === "string" ? toolMsg.content : JSON.stringify(toolMsg.content);
+      await addMessage(db, sessionId, "tool", toolContent, {
+        tool_call_id: toolMsg.tool_call_id,
+      });
+    }
+  }
+
+  // Persist the final assistant message
   const lastMessage = finalState.messages[finalState.messages.length - 1];
   const responseText =
     typeof lastMessage.content === "string"
