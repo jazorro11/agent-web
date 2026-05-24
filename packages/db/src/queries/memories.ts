@@ -71,3 +71,42 @@ export async function incrementRetrievalCount(
   });
   if (error) throw error;
 }
+
+export async function findSimilarMemory(
+  db: DbClient,
+  params: {
+    userId: string;
+    type: MemoryType;
+    embedding: number[];
+    threshold?: number;
+  }
+): Promise<MemorySearchResult | null> {
+  const { data, error } = await db.rpc("match_memories_by_type", {
+    query_embedding:      JSON.stringify(params.embedding),
+    match_user_id:        params.userId,
+    match_type:           params.type,
+    match_count:          1,
+    similarity_threshold: params.threshold ?? 0.92,
+  });
+  if (error) throw error;
+  return ((data ?? []) as MemorySearchResult[])[0] ?? null;
+}
+
+export async function updateMemory(
+  db: DbClient,
+  params: { id: string; content: string; embedding: number[] }
+): Promise<void> {
+  const { error } = await db
+    .from("memories")
+    .update({
+      content:   params.content,
+      embedding: JSON.stringify(params.embedding),
+    })
+    .eq("id", params.id);
+  if (error) throw error;
+}
+
+export async function deleteMemory(db: DbClient, id: string): Promise<void> {
+  const { error } = await db.from("memories").delete().eq("id", id);
+  if (error) throw error;
+}
