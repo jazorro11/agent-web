@@ -38,6 +38,11 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+        <span className="font-medium">💡 ¿Explorando la demo?</span>{" "}
+        Si creaste tu cuenta con un correo alterno, úsalo aquí para
+        iniciar sesión.
+      </div>
       {error && (
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400">
           {error}
