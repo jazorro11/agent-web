@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { PendingConfirmation } from "@agents/types";
+import { getChips } from "./chip-suggestions";
 
 /* ─── Inline markdown renderer ─── */
 type MdSeg = { t: "h" | "li" | "link" | "bold" | "text" | "br"; c: string; href?: string };
@@ -94,6 +95,7 @@ interface Props {
   sessions: SessionItem[];
   currentSessionId: string | null;
   initialPendingConfirmation: PendingConfirmation | null;
+  enabledTools: string[];
 }
 
 function formatSessionDate(dateStr: string): string {
@@ -153,6 +155,7 @@ export function ChatInterface({
   sessions,
   currentSessionId,
   initialPendingConfirmation,
+  enabledTools,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>(() =>
     buildInitialMessages(initialMessages, initialPendingConfirmation)
@@ -293,6 +296,7 @@ export function ChatInterface({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, sessionId: activeSessionId }),
       });
+      if (!res.ok) throw new Error(`Error del servidor: ${res.status}`);
 
       const data = await res.json();
 
@@ -326,6 +330,42 @@ export function ChatInterface({
 
   const isReadOnly = !activeSessionId;
   const hasPendingConfirmation = messages.some((m) => m.confirmationStatus === "pending");
+
+  async function handleChipClick(chipMessage: string) {
+    if (loading || !activeSessionId || hasPendingConfirmation) return;
+    setMessages((prev) => [...prev, { role: "user", content: chipMessage }]);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: chipMessage, sessionId: activeSessionId }),
+      });
+      if (!res.ok) throw new Error(`Error del servidor: ${res.status}`);
+      const data = await res.json();
+      if (data.response) {
+        setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+      }
+      if (data.responseType === "pending_confirmation" && data.pendingConfirmation) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.pendingConfirmation.message,
+            confirmation: data.pendingConfirmation,
+            confirmationStatus: "pending",
+          },
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Error al procesar tu mensaje. Intenta de nuevo." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -401,11 +441,26 @@ export function ChatInterface({
         <div className="flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto max-w-2xl space-y-4">
             {messages.length === 0 && (
-              <div className="text-center text-sm text-neutral-400 py-20">
+              <div className="flex flex-col items-center justify-center py-20 text-center">
                 <p className="text-lg font-medium text-neutral-600 dark:text-neutral-300">
-                  {agentName ? `Hola! Soy ${agentName}` : "Hola!"}
+                  Hola, soy tu agente.
                 </p>
-                <p className="mt-1">Escribe un mensaje para comenzar.</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  Prueba alguna de estas acciones o escribe lo que necesitas.
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-2">
+                  {getChips(enabledTools).map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => handleChipClick(chip.message)}
+                      disabled={loading || !activeSessionId || hasPendingConfirmation}
+                      className="rounded-full border border-blue-300 bg-blue-50 px-4 py-1.5 text-sm text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((msg, i) => (

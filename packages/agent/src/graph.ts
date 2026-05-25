@@ -51,6 +51,8 @@ export interface AgentInput {
   notionToken?: string;
   /** Skip HITL interrupts and auto-approve all tool calls. Use only for unattended runs (e.g. cron). */
   bypassConfirmation?: boolean;
+  /** True when the caller is the shared demo account. Used to tailor the tools block in the system prompt. */
+  isDemoUser?: boolean;
 }
 
 export type AgentResponseType = "message" | "pending_confirmation";
@@ -61,6 +63,48 @@ export interface AgentOutput {
   response: string;
   toolCalls: string[];
   pendingConfirmation?: PendingConfirmation;
+}
+
+/** Builds the <herramientas_activas> block appended to the system prompt. */
+export function buildToolsBlock(enabledTools: UserToolSetting[], isDemoUser: boolean): string {
+  if (isDemoUser) {
+    return `<herramientas_activas>
+Estás en modo demo. Tienes acceso a herramientas de solo lectura:
+
+Archivos: leer archivos de texto.
+Utilidades: ver preferencias del usuario, listar herramientas activas.
+
+Con una cuenta completa puedes conectar GitHub, Google Calendar y Notion
+para crear eventos, issues, páginas y ejecutar tareas programadas.
+</herramientas_activas>`;
+  }
+
+  const activeIds = enabledTools.filter((t) => t.enabled).map((t) => t.tool_id);
+  if (activeIds.length === 0) return "";
+
+  const groups: Record<string, string[]> = {};
+  for (const toolId of activeIds) {
+    const def = TOOL_CATALOG.find((t) => t.id === toolId);
+    if (!def) continue;
+    let category: string;
+    if (def.requires_integration === "github") category = "GitHub";
+    else if (def.requires_integration === "google") category = "Google Calendar";
+    else if (def.requires_integration === "notion") category = "Notion";
+    else if (["read_file", "write_file", "edit_file"].includes(toolId)) category = "Archivos";
+    else category = "Utilidades";
+    if (!groups[category]) groups[category] = [];
+    groups[category].push(def.displayName);
+  }
+
+  const lines = Object.entries(groups)
+    .map(([cat, names]) => `${cat}: ${names.join(", ")}.`)
+    .join("\n");
+
+  return `<herramientas_activas>
+Tienes acceso a las siguientes herramientas:
+
+${lines}
+</herramientas_activas>`;
 }
 
 /** Confirmation message shown to the human for a given tool + args. */
@@ -370,6 +414,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     googleToken,
     notionToken,
     bypassConfirmation = false,
+    isDemoUser = false,
   } = input;
 
   const model = createChatModel();
@@ -651,7 +696,10 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
     // Wrap the user-controlled system prompt in XML delimiters to prevent
     // prompt injection from influencing the model's core instructions.
-    const wrappedSystemPrompt = `<user_persona>\n${systemPrompt}\n</user_persona>`;
+    const toolsBlock = buildToolsBlock(enabledTools, isDemoUser ?? false);
+    const wrappedSystemPrompt = toolsBlock
+      ? `<user_persona>\n${systemPrompt}\n</user_persona>\n\n${toolsBlock}`
+      : `<user_persona>\n${systemPrompt}\n</user_persona>`;
     finalState = await app.invoke(
       { messages: [new HumanMessage(message!)], sessionId, userId, systemPrompt: wrappedSystemPrompt },
       config

@@ -5,7 +5,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "type-check": "tsc --noEmit",
-    "test": "tsx --test src/tools/__tests__/**/*.test.ts"
+    "test": "tsx --test \"src/**/__tests__/**/*.test.ts\""
   },
   "dependencies": {
     "@agents/db": "*",

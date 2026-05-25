@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getUserToolSettings } from "@agents/db";
 import { ChatInterface } from "./chat-interface";
 
 export default async function ChatPage() {
@@ -14,6 +15,9 @@ export default async function ChatPage() {
     .single();
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
+
+  const toolSettings = await getUserToolSettings(supabase, user.id);
+  const enabledToolIds = toolSettings.filter((t) => t.enabled).map((t) => t.tool_id);
 
   const { data: sessions } = await supabase
     .from("agent_sessions")
@@ -112,12 +116,12 @@ export default async function ChatPage() {
     <div className="flex min-h-screen flex-col">
       {isDemoUser && (
         <div className="flex items-center justify-center gap-2 bg-amber-50 px-4 py-2 text-center text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-          <span>Estás probando el demo — solo herramientas de lectura disponibles.</span>
+          <span>Estás probando el demo. Solo herramientas de lectura disponibles.</span>
           <a
             href="/api/auth/demo-exit"
             className="font-semibold underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200"
           >
-            Regístrate para acceso completo →
+            Regístrate para acceso completo.
           </a>
         </div>
       )}
@@ -154,6 +158,7 @@ export default async function ChatPage() {
         sessions={allSessions}
         currentSessionId={currentSession?.id ?? null}
         initialPendingConfirmation={initialPendingConfirmation}
+        enabledTools={enabledToolIds}
       />
     </div>
   );

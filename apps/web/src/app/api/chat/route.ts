@@ -177,6 +177,7 @@ export async function POST(request: Request) {
       githubToken,
       googleToken,
       notionToken,
+      isDemoUser,
     });
 
     if (!result.pendingConfirmation) {
