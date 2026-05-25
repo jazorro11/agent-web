@@ -249,7 +249,7 @@ export function SettingsForm({
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
             Estás en modo demo. Las herramientas de escritura no están disponibles.{" "}
             <a href="/signup" className="font-medium underline">
-              Regístrate para acceso completo →
+              Regístrate para acceso completo.
             </a>
           </p>
         )}
@@ -270,7 +270,7 @@ export function SettingsForm({
                 />
                 <span className="flex flex-wrap items-center gap-1">
                   <span className="font-medium">{displayName}</span>
-                  <span className="text-neutral-500">— {displayDescription}</span>
+                  <span className="text-neutral-500">: {displayDescription}</span>
                   {isBlockedInDemo && (
                     <span className="inline-flex items-center rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">
                       No disponible en demo

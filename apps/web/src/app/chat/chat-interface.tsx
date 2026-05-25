@@ -403,9 +403,9 @@ export function ChatInterface({
             {messages.length === 0 && (
               <div className="text-center text-sm text-neutral-400 py-20">
                 <p className="text-lg font-medium text-neutral-600 dark:text-neutral-300">
-                  {agentName ? `Hola! Soy ${agentName}` : "Hola!"}
+                  Hola, soy tu agente.
                 </p>
-                <p className="mt-1">Escribe un mensaje para comenzar.</p>
+                <p className="mt-1">Prueba alguna de estas acciones o escribe lo que necesitas.</p>
               </div>
             )}
             {messages.map((msg, i) => (
