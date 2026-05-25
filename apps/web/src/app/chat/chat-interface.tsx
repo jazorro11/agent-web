@@ -148,6 +148,26 @@ function buildInitialMessages(
   return msgs;
 }
 
+function getChips(tools: string[]): Array<{ label: string; message: string }> {
+  const dynamic: Array<{ label: string; message: string }> = [];
+  if (tools.includes("github_list_repos") || tools.includes("github_list_issues")) {
+    dynamic.push({ label: "Lista mis repositorios", message: "Lista mis repositorios" });
+  }
+  if (tools.includes("google_calendar_list_events") || tools.includes("google_calendar_list_calendars")) {
+    dynamic.push({ label: "Eventos de esta semana", message: "Muestra mis eventos de esta semana" });
+  }
+  if (tools.includes("notion_search") || tools.includes("notion_get_page")) {
+    dynamic.push({ label: "Busca en Notion", message: "Busca mis notas recientes en Notion" });
+  }
+  if (tools.includes("read_file")) {
+    dynamic.push({ label: "Lee un archivo", message: "Lee el archivo README.md" });
+  }
+  return [
+    ...dynamic.slice(0, 3),
+    { label: "¿Qué puedes hacer?", message: "¿Qué puedes hacer?" },
+  ];
+}
+
 export function ChatInterface({
   agentName,
   initialMessages,
@@ -295,6 +315,7 @@ export function ChatInterface({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, sessionId: activeSessionId }),
       });
+      if (!res.ok) throw new Error(`Error del servidor: ${res.status}`);
 
       const data = await res.json();
 
@@ -328,26 +349,6 @@ export function ChatInterface({
 
   const isReadOnly = !activeSessionId;
   const hasPendingConfirmation = messages.some((m) => m.confirmationStatus === "pending");
-
-  function getChips(tools: string[]): Array<{ label: string; message: string }> {
-    const dynamic: Array<{ label: string; message: string }> = [];
-    if (tools.some((t) => t === "github_list_repos" || t === "github_list_issues")) {
-      dynamic.push({ label: "Lista mis repositorios", message: "Lista mis repositorios" });
-    }
-    if (tools.some((t) => t === "google_calendar_list_events" || t === "google_calendar_list_calendars")) {
-      dynamic.push({ label: "Eventos de esta semana", message: "Muestra mis eventos de esta semana" });
-    }
-    if (tools.some((t) => t === "notion_search" || t === "notion_get_page")) {
-      dynamic.push({ label: "Busca en Notion", message: "Busca mis notas recientes en Notion" });
-    }
-    if (tools.includes("read_file")) {
-      dynamic.push({ label: "Lee un archivo", message: "Lee el archivo README.md" });
-    }
-    return [
-      ...dynamic.slice(0, 3),
-      { label: "¿Qué puedes hacer?", message: "¿Qué puedes hacer?" },
-    ];
-  }
 
   async function handleChipClick(chipMessage: string) {
     if (loading || !activeSessionId || hasPendingConfirmation) return;
