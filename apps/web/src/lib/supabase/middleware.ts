@@ -31,7 +31,7 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const publicPaths = ["/login", "/signup", "/auth/callback"];
+  const publicPaths = ["/login", "/signup", "/auth/callback", "/api/auth/demo-session"];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
   // Server-to-server routes that authenticate via their own secret header,
   // not via browser cookies — exempt from the Supabase session redirect.
