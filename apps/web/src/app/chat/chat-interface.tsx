@@ -359,6 +359,7 @@ export function ChatInterface({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: chipMessage, sessionId: activeSessionId }),
       });
+      if (!res.ok) throw new Error(`Error del servidor: ${res.status}`);
       const data = await res.json();
       if (data.response) {
         setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);

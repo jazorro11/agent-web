@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getUserToolSettings } from "@agents/db";
 import { ChatInterface } from "./chat-interface";
 
 export default async function ChatPage() {
@@ -15,13 +16,8 @@ export default async function ChatPage() {
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 
-  const { data: toolSettings } = await supabase
-    .from("user_tool_settings")
-    .select("tool_id")
-    .eq("user_id", user.id)
-    .eq("enabled", true);
-
-  const enabledToolIds = (toolSettings ?? []).map((t) => t.tool_id as string);
+  const toolSettings = await getUserToolSettings(supabase, user.id);
+  const enabledToolIds = toolSettings.filter((t) => t.enabled).map((t) => t.tool_id);
 
   const { data: sessions } = await supabase
     .from("agent_sessions")
