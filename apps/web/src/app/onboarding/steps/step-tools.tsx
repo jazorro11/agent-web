@@ -129,6 +129,13 @@ export function StepTools({ data, onChange, isDemoUser = false }: Props) {
             .map((id) => TOOL_CATALOG.find((t) => t.id === id))
             .filter((t): t is NonNullable<typeof t> => t != null)
             .filter((t) => visibleToolIds.has(t.id));
+          const hiddenDemoTools =
+            isDemoUser && !isDemoBlocked
+              ? cat.toolIds
+                  .map((id) => TOOL_CATALOG.find((t) => t.id === id))
+                  .filter((t): t is NonNullable<typeof t> => t != null)
+                  .filter((t) => !visibleToolIds.has(t.id))
+              : [];
 
           return (
             <div
@@ -213,6 +220,21 @@ export function StepTools({ data, onChange, isDemoUser = false }: Props) {
                       </label>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Demo: show risk-locked tools as greyed out in non-integration categories */}
+              {hiddenDemoTools.length > 0 && (
+                <div className="mt-1.5 space-y-1.5 opacity-40 select-none">
+                  {hiddenDemoTools.map((t) => (
+                    <div key={t.id} className="flex items-center gap-2 rounded-md p-1.5">
+                      <input type="checkbox" disabled className="rounded border-neutral-300" />
+                      <span className="flex-1 text-xs">{t.displayName}</span>
+                      <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-400 dark:bg-neutral-800">
+                        Requiere registro
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
 
