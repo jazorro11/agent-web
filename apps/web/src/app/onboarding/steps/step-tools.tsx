@@ -6,6 +6,7 @@ import type { OnboardingData } from "../wizard";
 interface Props {
   data: OnboardingData;
   onChange: (partial: Partial<OnboardingData>) => void;
+  isDemoUser?: boolean;
 }
 
 const RISK_LABELS = {
@@ -14,7 +15,11 @@ const RISK_LABELS = {
   high: { text: "Alto", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
 };
 
-export function StepTools({ data, onChange }: Props) {
+export function StepTools({ data, onChange, isDemoUser = false }: Props) {
+  const visibleTools = isDemoUser
+    ? TOOL_CATALOG.filter((t) => t.risk === "low")
+    : TOOL_CATALOG;
+
   function toggleTool(toolId: string) {
     const enabled = data.enabledTools.includes(toolId);
     onChange({
@@ -34,8 +39,15 @@ export function StepTools({ data, onChange }: Props) {
         </p>
       </div>
 
+      {isDemoUser && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          En modo demo solo están disponibles las herramientas de lectura (riesgo bajo).
+          Regístrate para desbloquear todas las herramientas.
+        </div>
+      )}
+
       <div className="space-y-3">
-        {TOOL_CATALOG.map((t) => {
+        {visibleTools.map((t) => {
           const risk = RISK_LABELS[t.risk];
           const enabled = data.enabledTools.includes(t.id);
           return (
