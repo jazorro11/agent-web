@@ -66,7 +66,7 @@ export interface AgentOutput {
 }
 
 /** Builds the <herramientas_activas> block appended to the system prompt. */
-function buildToolsBlock(enabledTools: UserToolSetting[], isDemoUser: boolean): string {
+export function buildToolsBlock(enabledTools: UserToolSetting[], isDemoUser: boolean): string {
   if (isDemoUser) {
     return `<herramientas_activas>
 Estás en modo demo. Tienes acceso a herramientas de solo lectura:

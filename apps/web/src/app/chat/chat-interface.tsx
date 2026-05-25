@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { PendingConfirmation } from "@agents/types";
+import { getChips } from "./chip-suggestions";
 
 /* ─── Inline markdown renderer ─── */
 type MdSeg = { t: "h" | "li" | "link" | "bold" | "text" | "br"; c: string; href?: string };
@@ -146,26 +147,6 @@ function buildInitialMessages(
   }
 
   return msgs;
-}
-
-function getChips(tools: string[]): Array<{ label: string; message: string }> {
-  const dynamic: Array<{ label: string; message: string }> = [];
-  if (tools.includes("github_list_repos") || tools.includes("github_list_issues")) {
-    dynamic.push({ label: "Lista mis repositorios", message: "Lista mis repositorios" });
-  }
-  if (tools.includes("google_calendar_list_events") || tools.includes("google_calendar_list_calendars")) {
-    dynamic.push({ label: "Eventos de esta semana", message: "Muestra mis eventos de esta semana" });
-  }
-  if (tools.includes("notion_search") || tools.includes("notion_get_page")) {
-    dynamic.push({ label: "Busca en Notion", message: "Busca mis notas recientes en Notion" });
-  }
-  if (tools.includes("read_file")) {
-    dynamic.push({ label: "Lee un archivo", message: "Lee el archivo README.md" });
-  }
-  return [
-    ...dynamic.slice(0, 3),
-    { label: "¿Qué puedes hacer?", message: "¿Qué puedes hacer?" },
-  ];
 }
 
 export function ChatInterface({

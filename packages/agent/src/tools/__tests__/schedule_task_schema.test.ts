@@ -168,8 +168,8 @@ test("schedule_task schema - valid maxRetries boundary 10", async (t) => {
   assert.equal(result.data.maxRetries, 10);
 });
 
-test("schedule_task schema - valid very long name", async (t) => {
-  const longName = "a".repeat(1000);
+test("schedule_task schema - valid name at max boundary (255 chars)", async (t) => {
+  const longName = "a".repeat(255);
   const input = {
     prompt: "Task",
     scheduleType: "one_time",
@@ -179,9 +179,20 @@ test("schedule_task schema - valid very long name", async (t) => {
   const result = scheduleTaskSchema.safeParse(input);
   assert(
     result.success,
-    `Expected valid for long name, got: ${JSON.stringify(result.error)}`
+    `Expected valid for 255-char name, got: ${JSON.stringify(result.error)}`
   );
-  assert.equal(result.data.name.length, 1000);
+  assert.equal(result.data.name.length, 255);
+});
+
+test("schedule_task schema - invalid name exceeds 255 chars", async (t) => {
+  const input = {
+    prompt: "Task",
+    scheduleType: "one_time",
+    runAt: "2025-12-25T10:00:00Z",
+    name: "a".repeat(256),
+  };
+  const result = scheduleTaskSchema.safeParse(input);
+  assert(!result.success, "Expected validation error for name > 255 characters");
 });
 
 test("schedule_task schema - valid tags with special characters", async (t) => {
