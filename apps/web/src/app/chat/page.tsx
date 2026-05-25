@@ -15,6 +15,14 @@ export default async function ChatPage() {
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 
+  const { data: toolSettings } = await supabase
+    .from("user_tool_settings")
+    .select("tool_id")
+    .eq("user_id", user.id)
+    .eq("enabled", true);
+
+  const enabledToolIds = (toolSettings ?? []).map((t) => t.tool_id as string);
+
   const { data: sessions } = await supabase
     .from("agent_sessions")
     .select("*")
@@ -154,6 +162,7 @@ export default async function ChatPage() {
         sessions={allSessions}
         currentSessionId={currentSession?.id ?? null}
         initialPendingConfirmation={initialPendingConfirmation}
+        enabledTools={enabledToolIds}
       />
     </div>
   );
