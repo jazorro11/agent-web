@@ -20,6 +20,8 @@ export default async function OnboardingPage() {
     .select("*")
     .eq("user_id", user.id);
 
+  const isDemoUser = (profile as Record<string, unknown>)?.is_demo_user === true;
+
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
@@ -27,6 +29,7 @@ export default async function OnboardingPage() {
           userId={user.id}
           initialProfile={profile}
           initialToolSettings={toolSettings ?? []}
+          isDemoUser={isDemoUser}
         />
       </div>
     </main>

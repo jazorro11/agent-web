@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
+import { TOOL_CATALOG, getToolRisk } from "@agents/types";
 import { StepProfile } from "./steps/step-profile";
 import { StepAgent } from "./steps/step-agent";
 import { StepTools } from "./steps/step-tools";
@@ -12,6 +13,7 @@ interface Props {
   userId: string;
   initialProfile: Record<string, unknown> | null;
   initialToolSettings: Array<{ tool_id: string; enabled: boolean }>;
+  isDemoUser?: boolean;
 }
 
 export interface OnboardingData {
@@ -25,10 +27,18 @@ export interface OnboardingData {
 
 const STEPS = ["Perfil", "Agente", "Herramientas", "Revisión"] as const;
 
-export function OnboardingWizard({ userId, initialProfile, initialToolSettings }: Props) {
+export function OnboardingWizard({ userId, initialProfile, initialToolSettings, isDemoUser = false }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  const initialEnabled = initialToolSettings
+    .filter((t) => t.enabled)
+    .map((t) => t.tool_id)
+    // Demo users may only enable low-risk tools — strip any higher-risk ones
+    // that might have been saved in a previous visit.
+    .filter((id) => !isDemoUser || getToolRisk(id) === "low");
+
   const [data, setData] = useState<OnboardingData>({
     name: (initialProfile?.name as string) || "",
     timezone: (initialProfile?.timezone as string) || Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -37,9 +47,7 @@ export function OnboardingWizard({ userId, initialProfile, initialToolSettings }
     agentSystemPrompt:
       (initialProfile?.agent_system_prompt as string) ||
       "Eres un asistente útil que ayuda al usuario a gestionar tareas.",
-    enabledTools: initialToolSettings
-      .filter((t) => t.enabled)
-      .map((t) => t.tool_id),
+    enabledTools: initialEnabled,
   });
 
   const supabase = createBrowserClient(
@@ -65,20 +73,13 @@ export function OnboardingWizard({ userId, initialProfile, initialToolSettings }
       updated_at: new Date().toISOString(),
     });
 
-    const TOOL_IDS = [
-      "get_user_preferences",
-      "list_enabled_tools",
-      "github_list_repos",
-      "github_list_issues",
-      "github_create_issue",
-      "github_create_repo",
-      "bash",
-      "read_file",
-      "write_file",
-      "edit_file",
-    ];
+    // For demo users, only persist low-risk tools — medium/high are blocked at the
+    // chat API level anyway, but keeping the DB consistent avoids confusion.
+    const allowedToolIds = TOOL_CATALOG
+      .filter((t) => !isDemoUser || t.risk === "low")
+      .map((t) => t.id);
 
-    for (const toolId of TOOL_IDS) {
+    for (const toolId of allowedToolIds) {
       await supabase.from("user_tool_settings").upsert(
         {
           user_id: userId,
@@ -121,7 +122,7 @@ export function OnboardingWizard({ userId, initialProfile, initialToolSettings }
       <div className="rounded-lg border border-neutral-200 bg-white p-6 shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
         {step === 0 && <StepProfile data={data} onChange={updateData} />}
         {step === 1 && <StepAgent data={data} onChange={updateData} />}
-        {step === 2 && <StepTools data={data} onChange={updateData} />}
+        {step === 2 && <StepTools data={data} onChange={updateData} isDemoUser={isDemoUser} />}
         {step === 3 && <StepReview data={data} />}
       </div>
 
