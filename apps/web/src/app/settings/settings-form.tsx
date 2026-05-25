@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
-import { TOOL_CATALOG } from "@agents/types";
+import { TOOL_CATALOG, getToolRisk } from "@agents/types";
 
 interface Props {
   userId: string;
   profile: Record<string, unknown> | null;
+  isDemoUser: boolean;
   toolSettings: Array<{ tool_id: string; enabled: boolean }>;
   telegramLinked: boolean;
   githubConnected: boolean;
@@ -18,6 +19,7 @@ interface Props {
 export function SettingsForm({
   userId,
   profile,
+  isDemoUser,
   toolSettings,
   telegramLinked,
   githubConnected,
@@ -243,21 +245,41 @@ export function SettingsForm({
       {/* Tools */}
       <section className="space-y-4">
         <h2 className="text-base font-semibold">Herramientas</h2>
+        {isDemoUser && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            Estás en modo demo. Las herramientas de escritura no están disponibles.{" "}
+            <a href="/signup" className="font-medium underline">
+              Regístrate para acceso completo →
+            </a>
+          </p>
+        )}
         <div className="space-y-2">
-          {TOOL_CATALOG.map(({ id, displayName, displayDescription }) => (
-            <label key={id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={enabledTools.includes(id)}
-                onChange={() => toggleTool(id)}
-                className="rounded border-neutral-300"
-              />
-              <span>
-                <span className="font-medium">{displayName}</span>
-                <span className="ml-1 text-neutral-500">— {displayDescription}</span>
-              </span>
-            </label>
-          ))}
+          {TOOL_CATALOG.map(({ id, displayName, displayDescription }) => {
+            const isBlockedInDemo = isDemoUser && getToolRisk(id) !== "low";
+            return (
+              <label
+                key={id}
+                className={`flex items-center gap-2 text-sm ${isBlockedInDemo ? "opacity-50" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isBlockedInDemo ? false : enabledTools.includes(id)}
+                  onChange={() => !isBlockedInDemo && toggleTool(id)}
+                  disabled={isBlockedInDemo}
+                  className="rounded border-neutral-300 disabled:cursor-not-allowed"
+                />
+                <span className="flex flex-wrap items-center gap-1">
+                  <span className="font-medium">{displayName}</span>
+                  <span className="text-neutral-500">— {displayDescription}</span>
+                  {isBlockedInDemo && (
+                    <span className="inline-flex items-center rounded-full border border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 dark:border-neutral-700">
+                      No disponible en demo
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </section>
 

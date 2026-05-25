@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServerClient, decrypt, touchSession } from "@agents/db";
 import { runAgent, flushSessionMemory, resolveGoogleToken, resolveNotionToken } from "@agents/agent";
+import { getToolRisk } from "@agents/types";
 
 export async function POST(request: Request) {
   try {
@@ -33,18 +34,28 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("agent_system_prompt, agent_name")
+      .select("agent_system_prompt, agent_name, is_demo_user")
       .eq("id", user.id)
       .single();
+
+    const isDemoUser = (profile?.is_demo_user as boolean) ?? false;
 
     const { data: toolSettings } = await supabase
       .from("user_tool_settings")
       .select("*")
       .eq("user_id", user.id);
 
+    // Demo accounts are restricted to low-risk (read-only) tools only.
+    const effectiveToolSettings = isDemoUser
+      ? (toolSettings ?? []).filter(
+          (t: Record<string, unknown>) => getToolRisk(t.tool_id as string) === "low"
+        )
+      : (toolSettings ?? []);
+
     if (process.env.AGENT_DEBUG_LOGS === "true") {
+      console.log("[chat] isDemoUser:", isDemoUser);
       console.log("[chat] enabledTools from DB:", JSON.stringify(
-        (toolSettings ?? []).map((t: Record<string, unknown>) => ({
+        effectiveToolSettings.map((t: Record<string, unknown>) => ({
           tool_id: t.tool_id,
           enabled: t.enabled,
         }))
@@ -148,7 +159,7 @@ export async function POST(request: Request) {
       sessionId: session.id,
       systemPrompt: (profile?.agent_system_prompt as string) ?? "Eres un asistente útil.",
       db,
-      enabledTools: (toolSettings ?? []).map((t: Record<string, unknown>) => ({
+      enabledTools: effectiveToolSettings.map((t: Record<string, unknown>) => ({
         id: t.id as string,
         user_id: t.user_id as string,
         tool_id: t.tool_id as string,
