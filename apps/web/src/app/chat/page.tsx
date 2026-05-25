@@ -85,8 +85,21 @@ export default async function ChatPage() {
         }
       : null;
 
+  const isDemoUser = (profile as Record<string, unknown>)?.is_demo_user === true;
+
   return (
     <div className="flex min-h-screen flex-col">
+      {isDemoUser && (
+        <div className="flex items-center justify-center gap-2 bg-amber-50 px-4 py-2 text-center text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          <span>Estás probando el demo — solo herramientas de lectura disponibles.</span>
+          <a
+            href="/signup"
+            className="font-semibold underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200"
+          >
+            Regístrate para acceso completo →
+          </a>
+        </div>
+      )}
       <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">

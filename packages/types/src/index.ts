@@ -12,6 +12,8 @@ export interface Profile {
   agent_name: string;
   agent_system_prompt: string;
   onboarding_completed: boolean;
+  /** When true, the chat API restricts this account to low-risk (read-only) tools. Used for the live portfolio demo. */
+  is_demo_user: boolean;
   created_at: string;
   updated_at: string;
 }

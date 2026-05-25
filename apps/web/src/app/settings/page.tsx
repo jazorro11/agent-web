@@ -62,6 +62,7 @@ export default async function SettingsPage() {
         <SettingsForm
           userId={user.id}
           profile={profile}
+          isDemoUser={(profile as Record<string, unknown>)?.is_demo_user === true}
           toolSettings={toolSettings ?? []}
           telegramLinked={!!telegramAccount}
           githubConnected={githubIntegration?.status === "active"}
