@@ -23,8 +23,29 @@ export default async function ChatPage() {
     .eq("status", "active")
     .order("last_used_at", { ascending: false });
 
-  const allSessions = sessions ?? [];
-  const currentSession = allSessions[0] ?? null;
+  let allSessions = sessions ?? [];
+  let currentSession = allSessions[0] ?? null;
+
+  // Auto-create a session if none exist (handles demo users on first login
+  // and any user who lost all active sessions).
+  if (!currentSession) {
+    const { data: newSession } = await supabase
+      .from("agent_sessions")
+      .insert({
+        user_id: user.id,
+        channel: "web",
+        status: "active",
+        budget_tokens_used: 0,
+        budget_tokens_limit: 100000,
+        last_used_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+    if (newSession) {
+      currentSession = newSession;
+      allSessions = [newSession];
+    }
+  }
 
   let sessionMessages: Array<{ role: string; content: string; created_at: string; structured_payload?: Record<string, unknown> }> = [];
   let initialPendingToolCallId: string | null = null;
