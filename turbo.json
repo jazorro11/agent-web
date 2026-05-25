@@ -26,7 +26,9 @@
         "BASH_TOOL_CWD",
         "FILE_TOOLS_ENABLED",
         "FILE_TOOLS_ROOT",
-        "CRON_SECRET"
+        "CRON_SECRET",
+        "DEMO_USER_EMAIL",
+        "DEMO_USER_PASSWORD"
       ]
     },
     "dev": {
